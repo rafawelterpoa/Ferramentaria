@@ -330,6 +330,8 @@ tr:hover td{background:#f7f9fc}
 #toast.show{transform:translateY(0);opacity:1}
 #toast.error{background:var(--accent)}
 #toast.success{background:var(--success)}
+.form-control{width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:7px;font-size:0.85rem;background:#fff;box-sizing:border-box;transition:border .2s}
+.form-control:focus{outline:none;border-color:#1D3557}
 </style>
 </head>
 <body>
@@ -429,6 +431,9 @@ tr:hover td{background:#f7f9fc}
       </a>
       <a href="#" onclick="navigate('relatorios',this)" data-page="relatorios">
         <span class="nav-icon">📋</span> Relatórios
+      </a>
+      <a href="#" id="navAdmin" onclick="navigate('admin',this)" data-page="admin" style="display:none">
+        <span class="nav-icon">⚙️</span> Admin
       </a>
     </nav>
     <div class="sidebar-footer">
@@ -747,6 +752,8 @@ tr:hover td{background:#f7f9fc}
 // ===================== CONFIG =====================
 const FB_BASE = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria';
 const FB_USUARIOS = 'https://mills-frota-default-rtdb.firebaseio.com/usuarios.json';
+const FB_COLAB = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/colaboradores';
+const FB_SYSUSERS = 'https://mills-frota-default-rtdb.firebaseio.com/usuarios';
 
 const OFICINAS = ['Assis (SP)','Contagem (MG)','Osasco (SP)','Parauapebas (PA)','Santos (SP)','Sumaré (SP)','São José dos Pinhais (PR)'];
 
@@ -860,6 +867,9 @@ async function startApp() {
   document.getElementById('app').style.display='flex';
   document.getElementById('sidebarUserName').textContent = STATE.usuario.nome||STATE.usuario.login;
   document.getElementById('sidebarUserPerfil').textContent = (STATE.usuario.perfil||'operador').charAt(0).toUpperCase()+(STATE.usuario.perfil||'operador').slice(1);
+  if(['master','admin'].includes(STATE.usuario.perfil||'')){
+    const na=document.getElementById('navAdmin');if(na)na.style.display='';
+  }
   await syncAll();
   navigate('dashboard', document.querySelector('nav a[data-page="dashboard"]'));
 }
@@ -906,14 +916,14 @@ function navigate(page, el) {
   STATE.currentPage = page;
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = {dashboard:'Dashboard',ferramentas:'Ferramentas',movimentacoes:'Movimentações',calibracao:'Calibração',relatorios:'Relatórios'};
+  const titles = {dashboard:'Dashboard',ferramentas:'Ferramentas',movimentacoes:'Movimentações',calibracao:'Calibração',relatorios:'Relatórios',admin:'Administração'};
   document.getElementById('topbarTitle').textContent = titles[page]||page;
   closeSidebar();
   renderPage(page);
 }
 
 function renderPage(page) {
-  const map = {dashboard:renderDashboard, ferramentas:renderFerramentas, movimentacoes:renderMovimentacoes, calibracao:renderCalibracao, relatorios:renderRelatorios};
+  const map = {dashboard:renderDashboard, ferramentas:renderFerramentas, movimentacoes:renderMovimentacoes, calibracao:renderCalibracao, relatorios:renderRelatorios, admin:renderAdmin};
   if (map[page]) map[page]();
 }
 
@@ -2129,6 +2139,446 @@ window.addEventListener('resize', ()=>{
     }
   });
 });
+
+// ===================== COLABORADORES =====================
+let _colabs = [];
+
+async function loadColabs() {
+  try {
+    const r = await fetch('https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/colaboradores.json');
+    const d = await r.json();
+    _colabs = d && typeof d === 'object' ? Object.values(d).filter(Boolean) : [];
+  } catch(e) { _colabs = []; }
+}
+
+async function saveColab(obj) {
+  await fetch(`https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/colaboradores/${obj.id}.json`,
+    {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+}
+
+async function deleteColab(id) {
+  await fetch(`https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/colaboradores/${id}.json`,{method:'DELETE'});
+}
+
+// ===================== SYSTEM USERS =====================
+let _sysUsers = [];
+
+async function loadSysUsers() {
+  try {
+    const r = await fetch('https://mills-frota-default-rtdb.firebaseio.com/usuarios.json');
+    const d = await r.json();
+    _sysUsers = Array.isArray(d) ? d : (d && typeof d === 'object' ? Object.values(d).filter(Boolean) : []);
+  } catch(e) { _sysUsers = []; }
+}
+
+async function saveSysUsers() {
+  await fetch('https://mills-frota-default-rtdb.firebaseio.com/usuarios.json',
+    {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(_sysUsers)});
+}
+
+// ===================== RENDER ADMIN =====================
+async function renderAdmin() {
+  const main = document.getElementById('pageContent');
+  if (!main) return;
+  await Promise.all([loadSysUsers(), loadColabs()]);
+  main.innerHTML = `
+<div style="max-width:1100px">
+
+  <!-- TABS -->
+  <div style="display:flex;gap:0;margin-bottom:24px;border-bottom:2px solid #e2e8f0">
+    <button id="adminTab-usuarios" onclick="adminMudarAba('usuarios')" style="padding:10px 24px;border:none;border-bottom:3px solid #1D3557;background:none;font-weight:700;font-size:0.9rem;color:#1D3557;cursor:pointer;margin-bottom:-2px">👤 Usuários do Sistema</button>
+    <button id="adminTab-colabs" onclick="adminMudarAba('colabs')" style="padding:10px 24px;border:none;border-bottom:3px solid transparent;background:none;font-weight:600;font-size:0.9rem;color:#94a3b8;cursor:pointer;margin-bottom:-2px">🧰 Colaboradores</button>
+  </div>
+
+  <!-- ABA USUÁRIOS -->
+  <div id="adminAba-usuarios">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:0.85rem;color:#64748b">${_sysUsers.length} usuário(s) cadastrado(s)</div>
+      <button onclick="adminNovoUsuario()" style="background:#1D3557;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:0.85rem;font-weight:600;cursor:pointer">+ Novo Usuário</button>
+    </div>
+    <div id="adminFormUsuario" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px">
+      <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:14px" id="adminFormUserLabel">Novo Usuário</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:12px">
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Nome completo</label><input id="au-nome" class="form-control" placeholder="Nome"></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Login</label><input id="au-login" class="form-control" placeholder="login"></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Senha</label><input id="au-senha" class="form-control" type="password" placeholder="••••••"></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Perfil</label>
+          <select id="au-perfil" class="form-control">
+            <option value="operador">Operador</option>
+            <option value="admin">Admin</option>
+            <option value="master">Master</option>
+          </select></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Oficina</label>
+          <select id="au-oficina" class="form-control">
+            <option value="">— Todas —</option>
+            <option>Assis (SP)</option><option>Contagem (MG)</option><option>Osasco (SP)</option>
+            <option>Parauapebas (PA)</option><option>Santos (SP)</option><option>Sumaré (SP)</option>
+            <option>São José dos Pinhais (PR)</option>
+          </select></div>
+      </div>
+      <input type="hidden" id="au-editing-login">
+      <div style="display:flex;gap:8px">
+        <button onclick="adminSalvarUsuario()" style="background:#1D3557;color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:0.85rem;font-weight:600;cursor:pointer">💾 Salvar</button>
+        <button onclick="document.getElementById('adminFormUsuario').style.display='none'" style="background:#e2e8f0;color:#475569;border:none;border-radius:7px;padding:8px 16px;font-size:0.85rem;cursor:pointer">Cancelar</button>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+        <thead><tr style="background:#0f172a;color:#fff">
+          <th style="padding:10px 14px;text-align:left">Nome</th>
+          <th style="padding:10px 14px;text-align:left">Login</th>
+          <th style="padding:10px 14px;text-align:left">Perfil</th>
+          <th style="padding:10px 14px;text-align:left">Oficina</th>
+          <th style="padding:10px 14px;text-align:center">Ações</th>
+        </tr></thead>
+        <tbody id="adminTbodyUsuarios">
+          ${_sysUsers.map((u,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'};border-bottom:1px solid #f1f5f9">
+            <td style="padding:9px 14px;font-weight:600">${u.nome||u.login||'—'}</td>
+            <td style="padding:9px 14px;font-family:monospace;color:#64748b">${u.login||'—'}</td>
+            <td style="padding:9px 14px"><span style="font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:5px;background:${u.perfil==='master'?'#fef2f2':u.perfil==='admin'?'#eff6ff':'#f0fdf4'};color:${u.perfil==='master'?'#dc2626':u.perfil==='admin'?'#2563eb':'#16a34a'}">${u.perfil||'operador'}</span></td>
+            <td style="padding:9px 14px;font-size:0.82rem;color:#64748b">${u.oficina||'—'}</td>
+            <td style="padding:9px 14px;text-align:center">
+              <button onclick="adminEditarUsuario('${u.login}')" style="background:none;border:none;cursor:pointer;color:#F37021;font-size:14px" title="Editar">✏️</button>
+              <button onclick="adminDeletarUsuario('${u.login}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px" title="Remover">🗑️</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ABA COLABORADORES -->
+  <div id="adminAba-colabs" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:0.85rem;color:#64748b">${_colabs.length} colaborador(es) cadastrado(s)</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="adminDownloadTemplate()" style="background:#0f766e;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:0.82rem;font-weight:600;cursor:pointer">⬇ Template Excel</button>
+        <button onclick="document.getElementById('colabExcelInput').click()" style="background:#7c3aed;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:0.82rem;font-weight:600;cursor:pointer">📥 Importar Excel</button>
+        <input type="file" id="colabExcelInput" accept=".xlsx,.xls,.csv" style="display:none" onchange="adminImportarColab(this)">
+        <button onclick="adminNovoColab()" style="background:#1D3557;color:#fff;border:none;border-radius:8px;padding:8px 18px;font-size:0.85rem;font-weight:600;cursor:pointer">+ Novo Colaborador</button>
+      </div>
+    </div>
+
+    <!-- PREVIEW IMPORTAÇÃO -->
+    <div id="colabImportPreview" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:16px;margin-bottom:16px">
+      <div style="font-weight:700;color:#16a34a;margin-bottom:8px" id="colabPreviewInfo"></div>
+      <div style="overflow-x:auto;max-height:260px;overflow-y:auto" id="colabPreviewTabela"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="adminConfirmarImport()" style="background:#16a34a;color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:0.85rem;font-weight:600;cursor:pointer">✅ Confirmar Importação</button>
+        <button onclick="document.getElementById('colabImportPreview').style.display='none'" style="background:#e2e8f0;color:#475569;border:none;border-radius:7px;padding:8px 16px;font-size:0.85rem;cursor:pointer">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- FORM COLABORADOR -->
+    <div id="adminFormColab" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px;margin-bottom:20px">
+      <div style="font-size:0.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:14px" id="adminFormColabLabel">Novo Colaborador</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:12px">
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Matrícula</label><input id="ac-matricula" class="form-control" placeholder="Ex: 12345"></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Nome completo</label><input id="ac-nome" class="form-control" placeholder="Nome"></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Cargo</label>
+          <select id="ac-cargo" class="form-control">
+            <option value="">— Selecione —</option>
+            <option>Mecânico</option><option>Técnico</option><option>Ferramenteiro</option>
+            <option>Supervisor</option><option>Operador</option><option>Outro</option>
+          </select></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Oficina</label>
+          <select id="ac-oficina" class="form-control">
+            <option value="">— Selecione —</option>
+            <option>Assis (SP)</option><option>Contagem (MG)</option><option>Osasco (SP)</option>
+            <option>Parauapebas (PA)</option><option>Santos (SP)</option><option>Sumaré (SP)</option>
+            <option>São José dos Pinhais (PR)</option>
+          </select></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Tipo</label>
+          <select id="ac-tipo" class="form-control">
+            <option value="campo">Campo (Kit)</option>
+            <option value="oficina">Oficina</option>
+            <option value="externo">Externo / Prestador</option>
+          </select></div>
+        <div><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Nº Kit (se campo)</label><input id="ac-kit" class="form-control" placeholder="Ex: K-042"></div>
+      </div>
+      <div style="margin-bottom:12px"><label style="font-size:0.78rem;font-weight:600;color:#475569;display:block;margin-bottom:4px">Observação</label><input id="ac-obs" class="form-control" placeholder="Observações..."></div>
+      <input type="hidden" id="ac-editing-id">
+      <div style="display:flex;gap:8px;align-items:center">
+        <button onclick="adminSalvarColab()" style="background:#1D3557;color:#fff;border:none;border-radius:7px;padding:8px 20px;font-size:0.85rem;font-weight:600;cursor:pointer">💾 Salvar</button>
+        <button onclick="document.getElementById('adminFormColab').style.display='none'" style="background:#e2e8f0;color:#475569;border:none;border-radius:7px;padding:8px 16px;font-size:0.85rem;cursor:pointer">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- FILTRO -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+      <input id="colabBusca" oninput="adminRenderColabs()" placeholder="🔍 Buscar nome ou matrícula..." style="padding:7px 12px;border:1px solid #e2e8f0;border-radius:7px;font-size:0.85rem;flex:1;min-width:180px">
+      <select id="colabFiltroOf" onchange="adminRenderColabs()" style="padding:7px 10px;border:1px solid #e2e8f0;border-radius:7px;font-size:0.85rem;background:#fff">
+        <option value="">Oficina — Todas</option>
+        <option>Assis (SP)</option><option>Contagem (MG)</option><option>Osasco (SP)</option>
+        <option>Parauapebas (PA)</option><option>Santos (SP)</option><option>Sumaré (SP)</option>
+        <option>São José dos Pinhais (PR)</option>
+      </select>
+      <select id="colabFiltroTipo" onchange="adminRenderColabs()" style="padding:7px 10px;border:1px solid #e2e8f0;border-radius:7px;font-size:0.85rem;background:#fff">
+        <option value="">Tipo — Todos</option>
+        <option value="campo">Campo</option><option value="oficina">Oficina</option><option value="externo">Externo</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto" id="colabTabelaWrap">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem">
+        <thead><tr style="background:#0f172a;color:#fff">
+          <th style="padding:10px 14px;text-align:left">Matrícula</th>
+          <th style="padding:10px 14px;text-align:left">Nome</th>
+          <th style="padding:10px 14px;text-align:left">Cargo</th>
+          <th style="padding:10px 14px;text-align:left">Oficina</th>
+          <th style="padding:10px 14px;text-align:left">Tipo</th>
+          <th style="padding:10px 14px;text-align:left">Kit</th>
+          <th style="padding:10px 14px;text-align:center">Ativo</th>
+          <th style="padding:10px 14px;text-align:center">Ações</th>
+        </tr></thead>
+        <tbody id="adminTbodyColabs"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>`;
+  adminRenderColabs();
+}
+
+function adminMudarAba(aba) {
+  ['usuarios','colabs'].forEach(a => {
+    document.getElementById(`adminAba-${a}`).style.display = a===aba?'':'none';
+    const btn = document.getElementById(`adminTab-${a}`);
+    if(btn){btn.style.borderBottomColor=a===aba?'#1D3557':'transparent';btn.style.color=a===aba?'#1D3557':'#94a3b8';btn.style.fontWeight=a===aba?'700':'600';}
+  });
+}
+
+function adminRenderColabs() {
+  const busca = (document.getElementById('colabBusca')?.value||'').toLowerCase();
+  const filtOf = document.getElementById('colabFiltroOf')?.value||'';
+  const filtTipo = document.getElementById('colabFiltroTipo')?.value||'';
+  let lista = _colabs;
+  if(busca) lista = lista.filter(c=>(c.nome||'').toLowerCase().includes(busca)||(c.matricula||'').toLowerCase().includes(busca));
+  if(filtOf) lista = lista.filter(c=>c.oficina===filtOf);
+  if(filtTipo) lista = lista.filter(c=>c.tipo===filtTipo);
+  const tbody = document.getElementById('adminTbodyColabs');
+  if(!tbody) return;
+  if(!lista.length){tbody.innerHTML='<tr><td colspan="8" style="padding:32px;text-align:center;color:#94a3b8">Nenhum colaborador encontrado.</td></tr>';return;}
+  const tipoCor={campo:'#2563eb',oficina:'#F37021',externo:'#7c3aed'};
+  tbody.innerHTML = lista.map((c,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'};border-bottom:1px solid #f1f5f9">
+    <td style="padding:9px 14px;font-family:monospace;font-weight:600">${c.matricula||'—'}</td>
+    <td style="padding:9px 14px;font-weight:600">${c.nome||'—'}</td>
+    <td style="padding:9px 14px;font-size:0.82rem;color:#64748b">${c.cargo||'—'}</td>
+    <td style="padding:9px 14px;font-size:0.82rem">${c.oficina||'—'}</td>
+    <td style="padding:9px 14px"><span style="font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:5px;background:${tipoCor[c.tipo]||'#94a3b8'}22;color:${tipoCor[c.tipo]||'#94a3b8'}">${c.tipo||'—'}</span></td>
+    <td style="padding:9px 14px;font-family:monospace;font-size:0.82rem">${c.kit||'—'}</td>
+    <td style="padding:9px 14px;text-align:center">${c.ativo!==false?'<span style="color:#16a34a;font-weight:700">✓</span>':'<span style="color:#dc2626;font-weight:700">✗</span>'}</td>
+    <td style="padding:9px 14px;text-align:center">
+      <button onclick="adminEditarColab('${c.id}')" style="background:none;border:none;cursor:pointer;color:#F37021;font-size:14px">✏️</button>
+      <button onclick="adminToggleColab('${c.id}')" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:14px" title="${c.ativo!==false?'Inativar':'Ativar'}">${c.ativo!==false?'🔴':'🟢'}</button>
+      <button onclick="adminDeletarColab('${c.id}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px">🗑️</button>
+    </td>
+  </tr>`).join('');
+}
+
+// ── USUÁRIOS DO SISTEMA ──────────────────────────────────
+function adminNovoUsuario() {
+  ['au-nome','au-login','au-senha','au-editing-login'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('au-perfil').value='operador';
+  document.getElementById('au-oficina').value='';
+  document.getElementById('adminFormUserLabel').textContent='Novo Usuário';
+  document.getElementById('adminFormUsuario').style.display='';
+}
+
+function adminEditarUsuario(login) {
+  const u = _sysUsers.find(x=>x.login===login); if(!u) return;
+  document.getElementById('au-nome').value = u.nome||'';
+  document.getElementById('au-login').value = u.login||'';
+  document.getElementById('au-senha').value = u.senha||'';
+  document.getElementById('au-perfil').value = u.perfil||'operador';
+  document.getElementById('au-oficina').value = u.oficina||'';
+  document.getElementById('au-editing-login').value = login;
+  document.getElementById('adminFormUserLabel').textContent = 'Editando: '+login;
+  document.getElementById('adminFormUsuario').style.display='';
+}
+
+async function adminSalvarUsuario() {
+  const nome = document.getElementById('au-nome').value.trim();
+  const login = document.getElementById('au-login').value.trim().toLowerCase();
+  const senha = document.getElementById('au-senha').value.trim();
+  const perfil = document.getElementById('au-perfil').value;
+  const oficina = document.getElementById('au-oficina').value;
+  const editLogin = document.getElementById('au-editing-login').value;
+  if(!nome||!login) return alert('Preencha nome e login.');
+  if(!editLogin && !senha) return alert('Informe a senha para novo usuário.');
+  if(editLogin) {
+    const idx = _sysUsers.findIndex(u=>u.login===editLogin);
+    if(idx>=0){_sysUsers[idx]={..._sysUsers[idx],nome,login,perfil,oficina};if(senha)_sysUsers[idx].senha=senha;}
+  } else {
+    if(_sysUsers.find(u=>u.login===login)) return alert('Login já existe.');
+    _sysUsers.push({nome,login,senha,perfil,oficina,setor:'Ferramentaria'});
+  }
+  await saveSysUsers();
+  showToast('✅ Usuário salvo!','success');
+  document.getElementById('adminFormUsuario').style.display='none';
+  renderAdmin();
+}
+
+async function adminDeletarUsuario(login) {
+  if(login === STATE.usuario?.login) return alert('Não pode remover seu próprio usuário.');
+  if(!confirm(`Remover usuário "${login}"?`)) return;
+  _sysUsers = _sysUsers.filter(u=>u.login!==login);
+  await saveSysUsers();
+  showToast('🗑️ Usuário removido.','success');
+  renderAdmin();
+}
+
+// ── COLABORADORES ──────────────────────────────────────
+function adminNovoColab() {
+  ['ac-matricula','ac-nome','ac-kit','ac-obs','ac-editing-id'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('ac-cargo').value='';
+  document.getElementById('ac-oficina').value='';
+  document.getElementById('ac-tipo').value='campo';
+  document.getElementById('adminFormColabLabel').textContent='Novo Colaborador';
+  document.getElementById('adminFormColab').style.display='';
+}
+
+function adminEditarColab(id) {
+  const c = _colabs.find(x=>x.id===id); if(!c) return;
+  document.getElementById('ac-matricula').value = c.matricula||'';
+  document.getElementById('ac-nome').value = c.nome||'';
+  document.getElementById('ac-cargo').value = c.cargo||'';
+  document.getElementById('ac-oficina').value = c.oficina||'';
+  document.getElementById('ac-tipo').value = c.tipo||'campo';
+  document.getElementById('ac-kit').value = c.kit||'';
+  document.getElementById('ac-obs').value = c.obs||'';
+  document.getElementById('ac-editing-id').value = id;
+  document.getElementById('adminFormColabLabel').textContent = 'Editando: '+c.nome;
+  document.getElementById('adminFormColab').style.display='';
+}
+
+async function adminSalvarColab() {
+  const nome = document.getElementById('ac-nome').value.trim();
+  if(!nome) return alert('Informe o nome do colaborador.');
+  const obj = {
+    nome,
+    matricula: document.getElementById('ac-matricula').value.trim(),
+    cargo: document.getElementById('ac-cargo').value,
+    oficina: document.getElementById('ac-oficina').value,
+    tipo: document.getElementById('ac-tipo').value,
+    kit: document.getElementById('ac-kit').value.trim(),
+    obs: document.getElementById('ac-obs').value.trim(),
+    ativo: true
+  };
+  const editId = document.getElementById('ac-editing-id').value;
+  if(editId) {
+    obj.id = editId;
+    const idx = _colabs.findIndex(c=>c.id===editId);
+    if(idx>=0) _colabs[idx] = {..._colabs[idx],...obj};
+  } else {
+    obj.id = geId('COL');
+    obj.ts = Date.now();
+    _colabs.push(obj);
+  }
+  await saveColab(obj);
+  showToast('✅ Colaborador salvo!','success');
+  document.getElementById('adminFormColab').style.display='none';
+  adminRenderColabs();
+  document.querySelector('[id^="adminAba-colabs"] [style*="colaborador"]').textContent = _colabs.length+' colaborador(es) cadastrado(s)';
+}
+
+async function adminToggleColab(id) {
+  const c = _colabs.find(x=>x.id===id); if(!c) return;
+  c.ativo = c.ativo===false ? true : false;
+  await saveColab(c);
+  adminRenderColabs();
+}
+
+async function adminDeletarColab(id) {
+  if(!confirm('Remover este colaborador?')) return;
+  _colabs = _colabs.filter(c=>c.id!==id);
+  await deleteColab(id);
+  showToast('🗑️ Colaborador removido.','success');
+  adminRenderColabs();
+}
+
+// ── IMPORTAÇÃO EXCEL ────────────────────────────────────
+let _importPreviewData = [];
+
+function adminDownloadTemplate() {
+  const header = ['Matricula','Nome','Cargo','Oficina','Tipo','Kit','Observacao'];
+  const ex = [
+    ['12345','João da Silva','Mecânico','Assis (SP)','campo','K-042',''],
+    ['67890','Maria Souza','Técnico','Contagem (MG)','oficina','',''],
+  ];
+  const csv = [header,...ex].map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'template_colaboradores.csv';
+  a.click();
+}
+
+function adminImportarColab(input) {
+  const file = input.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, {type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(rows.length < 2){alert('Arquivo vazio ou sem dados.');return;}
+      const header = rows[0].map(h=>String(h).toLowerCase().trim());
+      const getCol = (names) => {
+        for(const n of names){const i=header.findIndex(h=>h.includes(n));if(i>=0)return i;}return -1;
+      };
+      const cols = {
+        matricula: getCol(['matricula','matrícula','mat']),
+        nome: getCol(['nome','name']),
+        cargo: getCol(['cargo','função','funcao','role']),
+        oficina: getCol(['oficina','unidade']),
+        tipo: getCol(['tipo','type']),
+        kit: getCol(['kit']),
+        obs: getCol(['obs','observacao','observação'])
+      };
+      _importPreviewData = rows.slice(1).filter(r=>r.some(c=>String(c).trim())).map(r=>({
+        matricula: cols.matricula>=0?String(r[cols.matricula]).trim():'',
+        nome: cols.nome>=0?String(r[cols.nome]).trim():'',
+        cargo: cols.cargo>=0?String(r[cols.cargo]).trim():'',
+        oficina: cols.oficina>=0?String(r[cols.oficina]).trim():'',
+        tipo: cols.tipo>=0?String(r[cols.tipo]).trim().toLowerCase():'campo',
+        kit: cols.kit>=0?String(r[cols.kit]).trim():'',
+        obs: cols.obs>=0?String(r[cols.obs]).trim():'',
+        ativo: true
+      })).filter(r=>r.nome);
+      const prev = document.getElementById('colabImportPreview');
+      document.getElementById('colabPreviewInfo').textContent = `${_importPreviewData.length} colaborador(es) encontrado(s) — revise antes de confirmar`;
+      document.getElementById('colabPreviewTabela').innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+        <thead><tr style="background:#0f172a;color:#fff">${['Matrícula','Nome','Cargo','Oficina','Tipo','Kit'].map(h=>`<th style="padding:6px 10px;text-align:left">${h}</th>`).join('')}</tr></thead>
+        <tbody>${_importPreviewData.map((r,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'}">
+          <td style="padding:6px 10px">${r.matricula||'—'}</td>
+          <td style="padding:6px 10px;font-weight:600">${r.nome}</td>
+          <td style="padding:6px 10px">${r.cargo||'—'}</td>
+          <td style="padding:6px 10px">${r.oficina||'—'}</td>
+          <td style="padding:6px 10px">${r.tipo||'—'}</td>
+          <td style="padding:6px 10px">${r.kit||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+      prev.style.display='';
+    } catch(err){alert('Erro ao ler arquivo: '+err.message);}
+  };
+  reader.readAsBinaryString(file);
+  input.value='';
+}
+
+async function adminConfirmarImport() {
+  if(!_importPreviewData.length) return;
+  let count=0;
+  for(const row of _importPreviewData){
+    const existe = _colabs.find(c=>c.matricula&&c.matricula===row.matricula);
+    if(existe){Object.assign(existe,row);await saveColab(existe);}
+    else{row.id=geId('COL');row.ts=Date.now();_colabs.push(row);await saveColab(row);}
+    count++;
+  }
+  document.getElementById('colabImportPreview').style.display='none';
+  _importPreviewData=[];
+  showToast(`✅ ${count} colaborador(es) importado(s)!`,'success');
+  adminRenderColabs();
+}
 </script>
 </body>
 </html>
