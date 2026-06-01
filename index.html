@@ -2174,7 +2174,7 @@ async function saveSysUsers() {
 
 // ===================== RENDER ADMIN =====================
 async function renderAdmin() {
-  const main = document.getElementById('pageContent');
+  const main = document.getElementById('mainContent');
   if (!main) return;
   await Promise.all([loadSysUsers(), loadColabs()]);
   main.innerHTML = `
