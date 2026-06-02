@@ -2,8 +2,16 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>MILLS — Ferramentaria</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#F37021">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ferramentaria">
+<link rel="apple-touch-icon" href="logo_nova_mills-removebg-preview.png">
 <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
 <style>
 /* ===================== RESET & BASE ===================== */
@@ -2574,6 +2582,26 @@ async function adminConfirmarImport() {
   _importPreviewData=[];
   showToast(`✅ ${count} colaborador(es) importado(s)!`,'success');
   adminRenderColabs();
+}
+
+// ── PWA: registrar service worker ──────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/Ferramentaria/sw.js')
+      .then(reg => {
+        console.log('SW registrado:', reg.scope);
+        // Notifica usuário quando há nova versão
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              showToast('🔄 Nova versão disponível! Recarregue o app.', 'info');
+            }
+          });
+        });
+      })
+      .catch(err => console.warn('SW falhou:', err));
+  });
 }
 </script>
 </body>
