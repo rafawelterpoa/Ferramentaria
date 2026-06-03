@@ -424,8 +424,19 @@ tr:hover td{background:#f7f9fc}
       <a href="#" class="active" onclick="navigate('dashboard',this)" data-page="dashboard">
         <span class="nav-icon">🏠</span> Dashboard
       </a>
-      <a href="#" onclick="navigate('ferramentas',this)" data-page="ferramentas">
-        <span class="nav-icon">🔧</span> Ferramentas
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.3);padding:10px 18px 4px;margin-top:4px">Kits</div>
+      <a href="#" onclick="navigate('kitcampo',this)" data-page="kitcampo">
+        <span class="nav-icon">🚜</span> Kit de Campo
+      </a>
+      <a href="#" onclick="navigate('kitoficina',this)" data-page="kitoficina">
+        <span class="nav-icon">🧰</span> Kit de Oficina
+      </a>
+      <div style="font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(255,255,255,.3);padding:10px 18px 4px;margin-top:4px">Ferramentaria</div>
+      <a href="#" onclick="navigate('ferramentaria',this)" data-page="ferramentaria">
+        <span class="nav-icon">🏭</span> Ferramentaria
+      </a>
+      <a href="#" onclick="navigate('catalogo',this)" data-page="catalogo">
+        <span class="nav-icon">📒</span> Catálogo
       </a>
       <a href="#" onclick="navigate('movimentacoes',this)" data-page="movimentacoes">
         <span class="nav-icon">↔️</span> Movimentações
@@ -920,14 +931,14 @@ function navigate(page, el) {
   STATE.currentPage = page;
   document.querySelectorAll('nav a').forEach(a=>a.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = {dashboard:'Dashboard',ferramentas:'Ferramentas',movimentacoes:'Movimentações',calibracao:'Calibração',relatorios:'Relatórios',admin:'Administração'};
+  const titles = {dashboard:'Dashboard',ferramentas:'Ferramentas',ferramentaria:'Ferramentaria',catalogo:'Catálogo de Ferramentas',kitcampo:'Kit de Campo',kitoficina:'Kit de Oficina',movimentacoes:'Movimentações',calibracao:'Calibração',relatorios:'Relatórios',admin:'Administração'};
   document.getElementById('topbarTitle').textContent = titles[page]||page;
   closeSidebar();
   renderPage(page);
 }
 
 function renderPage(page) {
-  const map = {dashboard:renderDashboard, ferramentas:renderFerramentas, movimentacoes:renderMovimentacoes, calibracao:renderCalibracao, relatorios:renderRelatorios, admin:renderAdmin};
+  const map = {dashboard:renderDashboard, ferramentas:renderFerramentas, ferramentaria:renderFerramentaria, catalogo:renderCatalogo, kitcampo:()=>renderKit('campo'), kitoficina:()=>renderKit('oficina'), movimentacoes:renderMovimentacoes, calibracao:renderCalibracao, relatorios:renderRelatorios, admin:renderAdmin};
   if (map[page]) map[page]();
 }
 
@@ -2629,6 +2640,701 @@ if ('serviceWorker' in navigator) {
       })
       .catch(err => console.warn('SW falhou:', err));
   });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CATÁLOGO DE FERRAMENTAS
+// ═══════════════════════════════════════════════════════════════
+const FB_CATALOGO = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/catalogo';
+const FB_MODELOS  = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/modelos_kit';
+const FB_KITS     = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/kits';
+const FB_CAUTELAS = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/cautelas';
+const FB_AUDITORIAS = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/auditorias';
+
+let _catalogo = [], _modelos = [], _kits = [], _cautelas = [], _auditorias = [];
+
+async function loadCatalogo(){ try{ const r=await fetch(FB_CATALOGO+'.json'); const d=await r.json(); _catalogo=d&&typeof d==='object'?Object.values(d).filter(Boolean).sort((a,b)=>a.descricao?.localeCompare(b.descricao||'')):[];}catch(e){_catalogo=[];} }
+async function loadModelos(){  try{ const r=await fetch(FB_MODELOS+'.json');  const d=await r.json(); _modelos=d&&typeof d==='object'?Object.values(d).filter(Boolean):[]; }catch(e){_modelos=[];} }
+async function loadKits(){     try{ const r=await fetch(FB_KITS+'.json');      const d=await r.json(); _kits=d&&typeof d==='object'?Object.values(d).filter(Boolean):[]; }catch(e){_kits=[];} }
+async function loadCautelas(){ try{ const r=await fetch(FB_CAUTELAS+'.json');  const d=await r.json(); _cautelas=d&&typeof d==='object'?Object.values(d).filter(Boolean):[]; }catch(e){_cautelas=[];} }
+async function loadAuditorias(){ try{ const r=await fetch(FB_AUDITORIAS+'.json'); const d=await r.json(); _auditorias=d&&typeof d==='object'?Object.values(d).filter(Boolean):[]; }catch(e){_auditorias=[];} }
+function geId2(p='ID'){ return p+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6); }
+
+// ── CATÁLOGO ──────────────────────────────────────────────────
+function renderCatalogo(){
+  loadCatalogo().then(()=>{
+    const mc = document.getElementById('mainContent');
+    const busca = '';
+    mc.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+      <div style="font-size:13px;color:var(--text2)">${_catalogo.length} ferramentas no catálogo</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${isAdmin()?`<button class="btn btn-outline" onclick="abrirImportCatalogo()">📥 Importar da Lista Excel</button>`:''}
+        <button class="btn btn-primary" onclick="abrirFormCatalogo()">+ Nova Ferramenta</button>
+      </div>
+    </div>
+    <div class="filters" style="margin-bottom:12px">
+      <input type="text" id="catBusca" placeholder="Buscar por código ou descrição..." oninput="filtrarCatalogo()" style="max-width:350px">
+    </div>
+    <div id="catTabela" class="table-wrap"></div>
+    <div id="catFormWrap"></div>
+    `;
+    filtrarCatalogo();
+  });
+}
+
+function filtrarCatalogo(){
+  const q=(document.getElementById('catBusca')?.value||'').toLowerCase();
+  const lista = _catalogo.filter(f=>!q||(f.codigo||'').toLowerCase().includes(q)||(f.descricao||'').toLowerCase().includes(q));
+  const wrap = document.getElementById('catTabela'); if(!wrap)return;
+  wrap.innerHTML=`<table class="data-table"><thead><tr><th>Código</th><th>Descrição</th><th>Custo</th><th>Ações</th></tr></thead><tbody>
+  ${lista.slice(0,200).map(f=>`<tr>
+    <td style="font-family:monospace;font-weight:600">${f.codigo||'—'}</td>
+    <td>${f.descricao||'—'}</td>
+    <td style="text-align:right">${f.custo?'R$ '+parseFloat(f.custo).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}</td>
+    <td><button class="btn-icon" onclick="editarCatalogo('${f.id}')" title="Editar">✏️</button>
+        <button class="btn-icon danger" onclick="deletarCatalogo('${f.id}')" title="Remover">🗑️</button></td>
+  </tr>`).join('')}
+  </tbody></table>${lista.length>200?`<div style="padding:8px;color:var(--text2);font-size:12px">Exibindo 200 de ${lista.length}. Use a busca para filtrar.</div>`:''}`;
+}
+
+function abrirFormCatalogo(id){
+  const it = id?_catalogo.find(c=>c.id===id):null;
+  const wrap = document.getElementById('catFormWrap');
+  if(!wrap)return;
+  wrap.innerHTML=`<div class="modal-overlay" id="modalCatForm" style="display:flex">
+    <div class="modal-box" style="max-width:480px">
+      <div class="modal-header"><h3>${it?'Editar':'Nova'} Ferramenta</h3><button class="modal-close" onclick="document.getElementById('modalCatForm').remove()">×</button></div>
+      <div class="modal-body">
+        <label class="form-label">Código</label><input class="form-control" id="catCod" value="${it?.codigo||''}" placeholder="Ex: 100">
+        <label class="form-label" style="margin-top:10px">Descrição *</label><input class="form-control" id="catDesc" value="${it?.descricao||''}" placeholder="Nome da ferramenta">
+        <label class="form-label" style="margin-top:10px">Custo (R$)</label><input class="form-control" id="catCusto" type="number" step="0.01" value="${it?.custo||''}" placeholder="0,00">
+        <input type="hidden" id="catEditId" value="${id||''}">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="document.getElementById('modalCatForm').remove()">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarCatalogo()">💾 Salvar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function editarCatalogo(id){ abrirFormCatalogo(id); }
+
+async function salvarCatalogo(){
+  const desc=(document.getElementById('catDesc')?.value||'').trim();
+  if(!desc)return alert('Informe a descrição.');
+  const obj={descricao:desc,codigo:(document.getElementById('catCod')?.value||'').trim(),custo:parseFloat(document.getElementById('catCusto')?.value)||0};
+  const editId=document.getElementById('catEditId')?.value||'';
+  if(editId){ obj.id=editId; const idx=_catalogo.findIndex(c=>c.id===editId); if(idx>=0)_catalogo[idx]={..._catalogo[idx],...obj}; }
+  else{ obj.id=geId2('CAT'); obj.ts=Date.now(); _catalogo.push(obj); }
+  await fetch(FB_CATALOGO+'/'+obj.id+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+  document.getElementById('modalCatForm')?.remove();
+  showToast('✅ Salvo!','success'); filtrarCatalogo();
+}
+
+async function deletarCatalogo(id){
+  if(!confirm('Remover esta ferramenta do catálogo?'))return;
+  _catalogo=_catalogo.filter(c=>c.id!==id);
+  await fetch(FB_CATALOGO+'/'+id+'.json',{method:'DELETE'});
+  showToast('🗑️ Removido.','success'); filtrarCatalogo();
+}
+
+// ── IMPORTAR CATÁLOGO DA ABA "Lista" ──────────────────────────
+function abrirImportCatalogo(){
+  const mc=document.getElementById('mainContent');
+  const inp=document.createElement('input');
+  inp.type='file'; inp.accept='.xls,.xlsx,.csv';
+  inp.onchange=e=>lerArquivoCatalogo(e.target.files[0]);
+  inp.click();
+}
+
+function lerArquivoCatalogo(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      // Procurar aba "Lista" primeiro, senão pegar a última aba
+      const sheetName=wb.SheetNames.find(n=>n.toLowerCase().includes('lista'))||wb.SheetNames[wb.SheetNames.length-1];
+      const ws=wb.Sheets[sheetName];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      // Aba Lista: Col[0]=código, Col[1]=descrição, Col[2]=custo (dados a partir da linha que tem 'Descrição')
+      let startRow=0;
+      for(let i=0;i<Math.min(10,rows.length);i++){
+        const row=rows[i];
+        if(row.some(c=>String(c).toLowerCase().includes('descri'))){startRow=i+1;break;}
+      }
+      const parsed=rows.slice(startRow).filter(r=>r[1]&&String(r[1]).trim()).map(r=>({
+        id:geId2('CAT'),ts:Date.now(),
+        codigo:String(r[0]||'').trim(),
+        descricao:String(r[1]||'').trim(),
+        custo:parseFloat(String(r[2]||'').replace(/[R$\s.]/g,'').replace(',','.'))||0
+      }));
+      if(!parsed.length){showToast('Nenhuma ferramenta encontrada na aba Lista','error');return;}
+      confirmarImportCatalogo(parsed,sheetName);
+    }catch(err){showToast('Erro ao ler arquivo: '+err.message,'error');}
+  };
+  reader.readAsBinaryString(file);
+}
+
+function confirmarImportCatalogo(parsed,sheetName){
+  const mc=document.getElementById('mainContent');
+  const prev=parsed.slice(0,10);
+  const div=document.createElement('div');
+  div.id='catImportPreview';
+  div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  div.innerHTML=`<div style="background:#fff;border-radius:12px;padding:24px;width:600px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h3 style="margin-bottom:8px">📥 Importar Catálogo</h3>
+    <p style="color:#64748b;font-size:12px;margin-bottom:12px">Aba: <strong>${sheetName}</strong> — <strong>${parsed.length}</strong> ferramentas encontradas (10 primeiras abaixo)</p>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">
+      <thead><tr style="background:#0f172a;color:#fff"><th style="padding:6px 10px;text-align:left">Código</th><th style="padding:6px 10px;text-align:left">Descrição</th><th style="padding:6px 10px;text-align:right">Custo</th></tr></thead>
+      <tbody>${prev.map((r,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'}"><td style="padding:5px 10px;font-family:monospace">${r.codigo}</td><td style="padding:5px 10px">${r.descricao}</td><td style="padding:5px 10px;text-align:right">${r.custo?'R$ '+r.custo.toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}</td></tr>`).join('')}</tbody>
+    </table>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="document.getElementById('catImportPreview').remove()">Cancelar</button>
+      <button class="btn btn-primary" onclick="executarImportCatalogo()">✅ Importar ${parsed.length} ferramentas</button>
+    </div>
+  </div>`;
+  div._dados=parsed;
+  document.body.appendChild(div);
+}
+
+async function executarImportCatalogo(){
+  const div=document.getElementById('catImportPreview');
+  if(!div)return;
+  const parsed=div._dados;
+  const btn=div.querySelector('button.btn-primary');
+  btn.textContent='Importando...'; btn.disabled=true;
+  // Salvar em lote
+  const obj={}; parsed.forEach(p=>{obj[p.id]=p;}); _catalogo=[..._catalogo,...parsed];
+  await fetch(FB_CATALOGO+'.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+  div.remove();
+  showToast(`✅ ${parsed.length} ferramentas importadas!`,'success');
+  filtrarCatalogo();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// KIT DE CAMPO / KIT DE OFICINA
+// ═══════════════════════════════════════════════════════════════
+let _kitAba = 'kits'; // 'modelos' | 'kits' | 'historico'
+let _kitTipo = 'campo';
+let _kitModoForm = null; // null | 'modelo' | 'kit'
+let _sigPadKit = null;
+
+async function renderKit(tipo){
+  _kitTipo = tipo;
+  await Promise.all([loadModelos(),loadKits(),loadCautelas(),loadAuditorias(),loadCatalogo()]);
+  renderKitPage();
+}
+
+function renderKitPage(){
+  const tipo=_kitTipo;
+  const label=tipo==='campo'?'Kit de Campo':'Kit de Oficina';
+  const mc=document.getElementById('mainContent');
+  mc.innerHTML=`
+  <div style="display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid var(--border)">
+    <button id="kTab-modelos" onclick="kitAba('modelos')" style="padding:10px 20px;border:none;border-bottom:3px solid ${_kitAba==='modelos'?'var(--primary)':'transparent'};background:none;font-weight:${_kitAba==='modelos'?700:500};color:${_kitAba==='modelos'?'var(--primary)':'var(--gray)'};cursor:pointer;font-size:13px">📦 Modelos</button>
+    <button id="kTab-kits"    onclick="kitAba('kits')"    style="padding:10px 20px;border:none;border-bottom:3px solid ${_kitAba==='kits'?'var(--primary)':'transparent'};background:none;font-weight:${_kitAba==='kits'?700:500};color:${_kitAba==='kits'?'var(--primary)':'var(--gray)'};cursor:pointer;font-size:13px">🗂 Kits Físicos</button>
+    <button id="kTab-historico" onclick="kitAba('historico')" style="padding:10px 20px;border:none;border-bottom:3px solid ${_kitAba==='historico'?'var(--primary)':'transparent'};background:none;font-weight:${_kitAba==='historico'?700:500};color:${_kitAba==='historico'?'var(--primary)':'var(--gray)'};cursor:pointer;font-size:13px">📋 Histórico</button>
+  </div>
+  <div id="kitConteudo"></div>`;
+  renderKitConteudo();
+}
+
+function kitAba(aba){ _kitAba=aba; renderKitPage(); }
+
+function renderKitConteudo(){
+  if(_kitAba==='modelos') renderKitModelos();
+  else if(_kitAba==='kits') renderKitsFisicos();
+  else renderKitHistorico();
+}
+
+// ─── MODELOS ─────────────────────────────────────────────────
+function renderKitModelos(){
+  const mods=_modelos.filter(m=>m.tipo===_kitTipo);
+  const wrap=document.getElementById('kitConteudo');
+  wrap.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:13px;color:var(--text2)">${mods.length} modelo(s) cadastrado(s)</div>
+    <button class="btn btn-primary" onclick="abrirFormModelo()">+ Novo Modelo</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px" id="gridModelos">
+  ${mods.length?mods.map(m=>`
+    <div style="background:#fff;border:1px solid var(--border);border-radius:10px;padding:16px;border-top:3px solid var(--primary)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">${m.nome}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-icon" onclick="editarModelo('${m.id}')" title="Editar">✏️</button>
+          <button class="btn-icon danger" onclick="deletarModelo('${m.id}')" title="Remover">🗑️</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--gray);margin-bottom:8px">${(m.itens||[]).length} ferramentas definidas</div>
+      ${m.descricao?`<div style="font-size:11px;color:var(--gray);margin-bottom:8px">${m.descricao}</div>`:''}
+      <div style="max-height:100px;overflow-y:auto">
+        ${(m.itens||[]).slice(0,5).map(it=>`<div style="font-size:10px;color:#475569;padding:2px 0;border-bottom:1px solid #f1f5f9">${it.qtd}× ${it.descricao}</div>`).join('')}
+        ${(m.itens||[]).length>5?`<div style="font-size:10px;color:var(--gray);padding:4px 0">+${(m.itens||[]).length-5} mais...</div>`:''}
+      </div>
+      <button class="btn btn-outline" style="margin-top:10px;width:100%;font-size:11px" onclick="criarKitDeModelo('${m.id}')">🗂 Criar Kit deste Modelo</button>
+    </div>`).join(''):'<div style="padding:40px;text-align:center;color:var(--gray)">Nenhum modelo cadastrado. Crie o primeiro!</div>'}
+  </div>`;
+}
+
+function abrirFormModelo(id){
+  const mod=id?_modelos.find(m=>m.id===id):null;
+  const itensHtml=(mod?.itens||[{codigo:'',descricao:'',qtd:1}]).map((it,i)=>kitItemRow(i,it)).join('');
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay'; overlay.id='modalModelo'; overlay.style.display='flex';
+  overlay.innerHTML=`<div class="modal-box" style="max-width:680px;max-height:90vh;overflow-y:auto">
+    <div class="modal-header"><h3>${mod?'Editar':'Novo'} Modelo — ${_kitTipo==='campo'?'Campo':'Oficina'}</h3><button class="modal-close" onclick="document.getElementById('modalModelo').remove()">×</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="form-label">Nome do Modelo *</label><input class="form-control" id="modNome" value="${mod?.nome||''}" placeholder="Ex: Caixa Padrão Campo PESA"></div>
+        <div><label class="form-label">Tipo</label><input class="form-control" value="${_kitTipo==='campo'?'Campo':'Oficina'}" readonly style="background:#f8fafc"></div>
+      </div>
+      <div style="margin-bottom:12px"><label class="form-label">Descrição</label><input class="form-control" id="modDesc" value="${mod?.descricao||''}" placeholder="Descrição opcional"></div>
+      <div style="font-weight:600;font-size:12px;margin-bottom:8px;color:var(--text)">Ferramentas do Kit</div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:100px 1fr 60px 36px;gap:6px;font-size:10px;font-weight:700;color:var(--gray);margin-bottom:6px;padding:0 4px">
+          <span>Código</span><span>Descrição</span><span style="text-align:center">Qtd</span><span></span>
+        </div>
+        <div id="modItens">${itensHtml}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <button class="btn btn-outline" style="font-size:11px" onclick="modAddItem()">+ Adicionar Item</button>
+        <button class="btn btn-outline" style="font-size:11px" onclick="modBuscarCatalogo()">🔍 Buscar no Catálogo</button>
+      </div>
+      <input type="hidden" id="modEditId" value="${id||''}">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="document.getElementById('modalModelo').remove()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarModelo()">💾 Salvar Modelo</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function kitItemRow(i,it){
+  return `<div class="kit-item-row" style="display:grid;grid-template-columns:100px 1fr 60px 36px;gap:6px;margin-bottom:4px" id="kitRow_${i}">
+    <input class="form-control" style="font-size:11px;font-family:monospace" placeholder="Código" value="${it.codigo||''}" oninput="kitItemAutoFill(${i},this.value)" id="kitCod_${i}">
+    <input class="form-control" style="font-size:11px" placeholder="Descrição" value="${it.descricao||''}" id="kitDesc_${i}">
+    <input class="form-control" style="font-size:11px;text-align:center" type="number" min="1" value="${it.qtd||1}" id="kitQtd_${i}">
+    <button style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;cursor:pointer;color:#dc2626" onclick="kitRemoveRow(${i})">×</button>
+  </div>`;
+}
+
+let _kitRowCount = 0;
+function modAddItem(){
+  const cont=document.getElementById('modItens'); if(!cont)return;
+  _kitRowCount++;
+  const div=document.createElement('div'); div.innerHTML=kitItemRow(_kitRowCount,{qtd:1});
+  cont.appendChild(div.firstChild);
+}
+
+function kitItemAutoFill(i,codigo){
+  const cat=_catalogo.find(c=>c.codigo===codigo.trim());
+  if(cat){ const d=document.getElementById('kitDesc_'+i); if(d)d.value=cat.descricao; }
+}
+
+function kitRemoveRow(i){ document.getElementById('kitRow_'+i)?.remove(); }
+
+function modBuscarCatalogo(){
+  const overlay=document.createElement('div');
+  overlay.id='modalCatBusca';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10000;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML=`<div style="background:#fff;border-radius:10px;padding:20px;width:520px;max-height:70vh;overflow-y:auto;box-shadow:0 10px 40px rgba(0,0,0,.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <strong>Buscar no Catálogo</strong>
+      <button onclick="document.getElementById('modalCatBusca').remove()" style="background:none;border:none;font-size:18px;cursor:pointer">×</button>
+    </div>
+    <input class="form-control" id="catBuscaModal" placeholder="Código ou descrição..." oninput="filtrarCatBusca()" style="margin-bottom:10px" autofocus>
+    <div id="catBuscaResultados" style="max-height:300px;overflow-y:auto"></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  filtrarCatBusca();
+}
+
+function filtrarCatBusca(){
+  const q=(document.getElementById('catBuscaModal')?.value||'').toLowerCase();
+  const lista=_catalogo.filter(c=>!q||(c.codigo||'').toLowerCase().includes(q)||(c.descricao||'').toLowerCase().includes(q)).slice(0,50);
+  const wrap=document.getElementById('catBuscaResultados'); if(!wrap)return;
+  wrap.innerHTML=lista.map(c=>`<div onclick="selecionarItemCatalogo('${c.codigo}','${c.descricao.replace(/'/g,"\\'")}',1)"
+    style="padding:7px 10px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:12px;hover:background:#f8fafc"
+    onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+    <span style="font-family:monospace;font-weight:600;color:var(--primary)">${c.codigo}</span> — ${c.descricao}
+    ${c.custo?`<span style="float:right;color:var(--gray);font-size:10px">R$ ${c.custo.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span>`:''}
+  </div>`).join('') || '<div style="padding:20px;text-align:center;color:var(--gray)">Nenhum resultado</div>';
+}
+
+function selecionarItemCatalogo(codigo,descricao,qtd){
+  const cont=document.getElementById('modItens'); if(!cont)return;
+  _kitRowCount++;
+  const div=document.createElement('div');
+  div.innerHTML=kitItemRow(_kitRowCount,{codigo,descricao,qtd});
+  cont.appendChild(div.firstChild);
+  document.getElementById('modalCatBusca')?.remove();
+}
+
+function editarModelo(id){ _kitRowCount=0; abrirFormModelo(id); }
+
+async function salvarModelo(){
+  const nome=(document.getElementById('modNome')?.value||'').trim();
+  if(!nome)return alert('Informe o nome do modelo.');
+  const itens=[];
+  document.querySelectorAll('.kit-item-row').forEach((row,i)=>{
+    const cod=row.querySelector('[id^="kitCod_"]')?.value||'';
+    const desc=row.querySelector('[id^="kitDesc_"]')?.value||'';
+    const qtd=parseInt(row.querySelector('[id^="kitQtd_"]')?.value)||1;
+    if(desc) itens.push({codigo:cod.trim(),descricao:desc.trim(),qtd});
+  });
+  const obj={nome,tipo:_kitTipo,descricao:(document.getElementById('modDesc')?.value||'').trim(),itens};
+  const editId=document.getElementById('modEditId')?.value||'';
+  if(editId){obj.id=editId;const idx=_modelos.findIndex(m=>m.id===editId);if(idx>=0)_modelos[idx]={..._modelos[idx],...obj};}
+  else{obj.id=geId2('MOD');obj.ts=Date.now();_modelos.push(obj);}
+  await fetch(FB_MODELOS+'/'+obj.id+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+  document.getElementById('modalModelo')?.remove();
+  showToast('✅ Modelo salvo!','success'); renderKitModelos();
+}
+
+async function deletarModelo(id){
+  if(!confirm('Remover este modelo?'))return;
+  _modelos=_modelos.filter(m=>m.id!==id);
+  await fetch(FB_MODELOS+'/'+id+'.json',{method:'DELETE'});
+  showToast('🗑️ Removido.','success'); renderKitModelos();
+}
+
+// ─── KITS FÍSICOS ────────────────────────────────────────────
+function renderKitsFisicos(){
+  const kits=_kits.filter(k=>k.tipo===_kitTipo);
+  const wrap=document.getElementById('kitConteudo');
+  const statusCor={disponivel:'#059669',entregue:'#F37021',auditoria:'#7c3aed'};
+  const statusLabel={disponivel:'Disponível',entregue:'Entregue',auditoria:'Em Auditoria'};
+  wrap.innerHTML=`
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+    <div style="font-size:13px;color:var(--text2)">${kits.length} kit(s) cadastrado(s)</div>
+    <button class="btn btn-primary" onclick="abrirFormKit()">+ Novo Kit</button>
+  </div>
+  <div class="table-wrap"><table class="data-table">
+    <thead><tr><th>Número</th><th>Modelo</th><th>Responsável</th><th>Oficina</th><th>Status</th><th>Entregue em</th><th>Ações</th></tr></thead>
+    <tbody>${kits.length?kits.map(k=>`<tr>
+      <td style="font-family:monospace;font-weight:700;font-size:14px">${k.numero||'—'}</td>
+      <td>${k.modeloNome||'—'}</td>
+      <td>${k.responsavel||'—'}</td>
+      <td>${k.oficina||'—'}</td>
+      <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${statusCor[k.status]||'#94a3b8'}18;color:${statusCor[k.status]||'#94a3b8'}">${statusLabel[k.status]||k.status||'—'}</span></td>
+      <td style="font-size:11px;color:var(--gray)">${k.dataEntrega?new Date(k.dataEntrega).toLocaleDateString('pt-BR'):'—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn-icon" onclick="abrirCautela('${k.id}','entrega')" title="Cautela Entrega">📤</button>
+        <button class="btn-icon" onclick="abrirCautela('${k.id}','devolucao')" title="Cautela Devolução">📥</button>
+        <button class="btn-icon" onclick="abrirAuditoria('${k.id}')" title="Auditoria">🔍</button>
+        <button class="btn-icon" onclick="editarKit('${k.id}')" title="Editar">✏️</button>
+        <button class="btn-icon danger" onclick="deletarKit('${k.id}')" title="Remover">🗑️</button>
+      </td>
+    </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--gray)">Nenhum kit cadastrado.</td></tr>'}
+    </tbody></table></div>`;
+}
+
+function criarKitDeModelo(modeloId){ abrirFormKit(null,modeloId); }
+function editarKit(id){ abrirFormKit(id); }
+
+function abrirFormKit(id,modeloIdPre){
+  const kit=id?_kits.find(k=>k.id===id):null;
+  const mods=_modelos.filter(m=>m.tipo===_kitTipo);
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay'; overlay.id='modalKit'; overlay.style.display='flex';
+  overlay.innerHTML=`<div class="modal-box" style="max-width:520px">
+    <div class="modal-header"><h3>${kit?'Editar':'Novo'} Kit — ${_kitTipo==='campo'?'Campo':'Oficina'}</h3><button class="modal-close" onclick="document.getElementById('modalKit').remove()">×</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="form-label">Número do Kit *</label><input class="form-control" id="kitNumero" value="${kit?.numero||''}" placeholder="Ex: 529-19" style="font-family:monospace;font-size:16px;font-weight:700"></div>
+        <div><label class="form-label">Modelo *</label><select class="form-control" id="kitModeloSel">
+          <option value="">— Selecione —</option>
+          ${mods.map(m=>`<option value="${m.id}" ${(kit?.modeloId===m.id||modeloIdPre===m.id)?'selected':''}>${m.nome}</option>`).join('')}
+        </select></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="form-label">Responsável</label><select class="form-control" id="kitResp">
+          <option value="">— Selecione —</option>
+          ${(_colabs||[]).map(c=>`<option ${kit?.responsavel===c.nome?'selected':''}>${c.nome}</option>`).join('')}
+        </select></div>
+        <div><label class="form-label">Oficina</label><select class="form-control" id="kitOficina">
+          <option value="">— Selecione —</option>
+          ${OFICINAS.map(o=>`<option ${kit?.oficina===o?'selected':''}>${o}</option>`).join('')}
+        </select></div>
+      </div>
+      <input type="hidden" id="kitEditId" value="${id||''}">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="document.getElementById('modalKit').remove()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarKit()">💾 Salvar Kit</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function salvarKit(){
+  const numero=(document.getElementById('kitNumero')?.value||'').trim();
+  const modeloId=document.getElementById('kitModeloSel')?.value||'';
+  if(!numero)return alert('Informe o número do kit.');
+  if(!modeloId)return alert('Selecione um modelo.');
+  const mod=_modelos.find(m=>m.id===modeloId);
+  const obj={numero,modeloId,modeloNome:mod?.nome||'',tipo:_kitTipo,responsavel:document.getElementById('kitResp')?.value||'',oficina:document.getElementById('kitOficina')?.value||'',status:'disponivel'};
+  const editId=document.getElementById('kitEditId')?.value||'';
+  if(editId){obj.id=editId;const idx=_kits.findIndex(k=>k.id===editId);if(idx>=0)_kits[idx]={..._kits[idx],...obj};}
+  else{obj.id=geId2('KIT');obj.ts=Date.now();_kits.push(obj);}
+  await fetch(FB_KITS+'/'+obj.id+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+  document.getElementById('modalKit')?.remove();
+  showToast('✅ Kit salvo!','success'); renderKitsFisicos();
+}
+
+async function deletarKit(id){
+  if(!confirm('Remover este kit?'))return;
+  _kits=_kits.filter(k=>k.id!==id);
+  await fetch(FB_KITS+'/'+id+'.json',{method:'DELETE'});
+  showToast('🗑️ Removido.','success'); renderKitsFisicos();
+}
+
+// ─── CAUTELA ─────────────────────────────────────────────────
+function abrirCautela(kitId, tipoCautela){
+  const kit=_kits.find(k=>k.id===kitId); if(!kit)return;
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay'; overlay.id='modalCautela'; overlay.style.display='flex';
+  overlay.innerHTML=`<div class="modal-box" style="max-width:600px;max-height:90vh;overflow-y:auto">
+    <div class="modal-header">
+      <h3>${tipoCautela==='entrega'?'📤 Cautela de Entrega':'📥 Cautela de Devolução'}</h3>
+      <button class="modal-close" onclick="document.getElementById('modalCautela').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f8fafc;border-radius:8px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><span style="font-size:10px;color:var(--gray);text-transform:uppercase">Kit</span><div style="font-weight:700;font-size:16px;font-family:monospace">${kit.numero}</div></div>
+        <div><span style="font-size:10px;color:var(--gray);text-transform:uppercase">Modelo</span><div style="font-weight:600;font-size:12px">${kit.modeloNome}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="form-label">Data *</label><input class="form-control" type="date" id="cauData" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div><label class="form-label">Responsável</label><input class="form-control" id="cauResp" value="${kit.responsavel||''}" placeholder="Nome do funcionário"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="form-label">Matrícula</label><input class="form-control" id="cauMatricula" placeholder="Matrícula"></div>
+        <div><label class="form-label">Função</label><input class="form-control" id="cauFuncao" placeholder="Ex: Mecânico"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="form-label">Encarregado</label><input class="form-control" id="cauEncarregado" placeholder="Nome do encarregado"></div>
+        <div><label class="form-label">Condição</label><select class="form-control" id="cauCondicao">
+          <option value="nova">Nova</option><option value="semi-nova">Semi Nova</option><option value="usada">Usada</option>
+        </select></div>
+      </div>
+      ${tipoCautela==='entrega'?`<div style="margin-bottom:12px"><label class="form-label">Nº Nota Fiscal</label><input class="form-control" id="cauNF" placeholder="Nº da NF"></div>`:''}
+      <div style="margin-bottom:12px"><label class="form-label">Observações</label><textarea class="form-control" id="cauObs" rows="2" placeholder="Observações adicionais..." style="resize:vertical"></textarea></div>
+      <div style="margin-bottom:4px"><label class="form-label">Assinatura do Responsável *</label></div>
+      <div class="sig-wrap"><canvas id="sigCanvasCautela" height="160"></canvas></div>
+      <button class="btn btn-outline btn-sm" onclick="clearSig('sigCanvasCautela')" style="margin-top:4px">Limpar</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="document.getElementById('modalCautela').remove()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarCautela('${kitId}','${tipoCautela}')">✅ Confirmar ${tipoCautela==='entrega'?'Entrega':'Devolução'}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>initSigPad('sigCanvasCautela'),200);
+}
+
+async function confirmarCautela(kitId,tipoCautela){
+  const kit=_kits.find(k=>k.id===kitId); if(!kit)return;
+  const canvas=document.getElementById('sigCanvasCautela');
+  const assinatura=canvas?canvas.toDataURL():'';
+  if(!assinatura||assinatura===document.createElement('canvas').toDataURL())return alert('Assinatura obrigatória.');
+  const cau={
+    id:geId2('CAU'),ts:Date.now(),kitId,kitNumero:kit.numero,modeloNome:kit.modeloNome,tipo:tipoCautela,
+    responsavel:(document.getElementById('cauResp')?.value||'').trim(),
+    matricula:(document.getElementById('cauMatricula')?.value||'').trim(),
+    funcao:(document.getElementById('cauFuncao')?.value||'').trim(),
+    encarregado:(document.getElementById('cauEncarregado')?.value||'').trim(),
+    data:document.getElementById('cauData')?.value||'',
+    condicao:document.getElementById('cauCondicao')?.value||'',
+    nf:(document.getElementById('cauNF')?.value||'').trim(),
+    obs:(document.getElementById('cauObs')?.value||'').trim(),
+    assinatura,operador:STATE.usuario?.nome||''
+  };
+  _cautelas.push(cau);
+  // Atualizar status do kit
+  const idx=_kits.findIndex(k=>k.id===kitId);
+  if(idx>=0){
+    _kits[idx].status=tipoCautela==='entrega'?'entregue':'disponivel';
+    if(tipoCautela==='entrega')_kits[idx].dataEntrega=cau.data;
+    await fetch(FB_KITS+'/'+kitId+'.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:_kits[idx].status,dataEntrega:_kits[idx].dataEntrega||''})});
+  }
+  await fetch(FB_CAUTELAS+'/'+cau.id+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cau)});
+  document.getElementById('modalCautela')?.remove();
+  showToast('✅ Cautela registrada!','success'); renderKitsFisicos();
+}
+
+// ─── AUDITORIA ───────────────────────────────────────────────
+function abrirAuditoria(kitId){
+  const kit=_kits.find(k=>k.id===kitId); if(!kit)return;
+  const mod=_modelos.find(m=>m.id===kit.modeloId);
+  const itens=mod?.itens||[];
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay'; overlay.id='modalAuditoria'; overlay.style.display='flex';
+  overlay.innerHTML=`<div class="modal-box" style="max-width:680px;max-height:90vh;overflow-y:auto">
+    <div class="modal-header"><h3>🔍 Auditoria — Kit ${kit.numero}</h3><button class="modal-close" onclick="document.getElementById('modalAuditoria').remove()">×</button></div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+        <div><label class="form-label">Data *</label><input class="form-control" type="date" id="audData" value="${new Date().toISOString().split('T')[0]}"></div>
+        <div><label class="form-label">Auditor</label><input class="form-control" id="audAuditor" value="${STATE.usuario?.nome||''}" placeholder="Nome do auditor"></div>
+      </div>
+      <div style="font-weight:600;font-size:12px;margin-bottom:8px">Check List — ${itens.length} itens</div>
+      <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:12px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr style="background:#0f172a;color:#fff">
+            <th style="padding:7px 10px;text-align:left">Cód.</th>
+            <th style="padding:7px 10px;text-align:left">Descrição</th>
+            <th style="padding:7px 10px;text-align:center">Qtd</th>
+            <th style="padding:7px 10px;text-align:center">Bom</th>
+            <th style="padding:7px 10px;text-align:center">Quebrado</th>
+            <th style="padding:7px 10px;text-align:center">Faltando</th>
+            <th style="padding:7px 10px;text-align:left">Obs</th>
+          </tr></thead>
+          <tbody>
+          ${itens.map((it,i)=>`<tr style="background:${i%2?'#fff':'#fafbff'};border-bottom:1px solid #f1f5f9">
+            <td style="padding:5px 10px;font-family:monospace;font-size:11px">${it.codigo||'—'}</td>
+            <td style="padding:5px 10px;font-size:11px">${it.descricao}</td>
+            <td style="padding:5px 10px;text-align:center;font-weight:600">${it.qtd}</td>
+            <td style="padding:5px 10px;text-align:center"><input type="radio" name="aud_${i}" value="bom" checked></td>
+            <td style="padding:5px 10px;text-align:center"><input type="radio" name="aud_${i}" value="quebrado"></td>
+            <td style="padding:5px 10px;text-align:center"><input type="radio" name="aud_${i}" value="faltando"></td>
+            <td style="padding:5px 10px"><input style="width:100%;border:1px solid #e2e8f0;border-radius:4px;padding:3px 6px;font-size:10px" placeholder="..." id="audObs_${i}"></td>
+          </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-bottom:4px"><label class="form-label">Assinatura do Técnico *</label></div>
+      <div class="sig-wrap"><canvas id="sigAudTec" height="120"></canvas></div>
+      <button class="btn btn-outline btn-sm" onclick="clearSig('sigAudTec')" style="margin-top:4px;margin-bottom:10px">Limpar</button>
+      <div><label class="form-label">Assinatura do Auditor</label></div>
+      <div class="sig-wrap"><canvas id="sigAudAud" height="120"></canvas></div>
+      <button class="btn btn-outline btn-sm" onclick="clearSig('sigAudAud')" style="margin-top:4px">Limpar</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="document.getElementById('modalAuditoria').remove()">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarAuditoria('${kitId}')">✅ Confirmar Auditoria</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>{initSigPad('sigAudTec');initSigPad('sigAudAud');},200);
+}
+
+async function confirmarAuditoria(kitId){
+  const kit=_kits.find(k=>k.id===kitId); if(!kit)return;
+  const mod=_modelos.find(m=>m.id===kit.modeloId);
+  const itens=(mod?.itens||[]).map((it,i)=>({
+    ...it,
+    condicao:document.querySelector(`input[name="aud_${i}"]:checked`)?.value||'bom',
+    obs:(document.getElementById('audObs_'+i)?.value||'').trim()
+  }));
+  const sigTec=document.getElementById('sigAudTec')?.toDataURL()||'';
+  const aud={
+    id:geId2('AUD'),ts:Date.now(),kitId,kitNumero:kit.numero,modeloNome:kit.modeloNome,
+    data:document.getElementById('audData')?.value||'',
+    auditor:(document.getElementById('audAuditor')?.value||'').trim(),
+    itens,assinaturaTecnico:sigTec,
+    assinaturaAuditor:document.getElementById('sigAudAud')?.toDataURL()||'',
+    operador:STATE.usuario?.nome||''
+  };
+  _auditorias.push(aud);
+  // Resumo
+  const faltando=itens.filter(it=>it.condicao==='faltando').length;
+  const quebrado=itens.filter(it=>it.condicao==='quebrado').length;
+  await fetch(FB_AUDITORIAS+'/'+aud.id+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(aud)});
+  // Atualizar status kit
+  const newStatus=faltando||quebrado?'auditoria':'entregue';
+  const idx=_kits.findIndex(k=>k.id===kitId);
+  if(idx>=0){_kits[idx].status=newStatus;await fetch(FB_KITS+'/'+kitId+'.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:newStatus})});}
+  document.getElementById('modalAuditoria')?.remove();
+  showToast(`✅ Auditoria registrada! ${faltando?`⚠ ${faltando} item(ns) faltando.`:''} ${quebrado?`⚠ ${quebrado} quebrado(s).`:'`'}`.trim(),'success');
+  renderKitsFisicos();
+}
+
+// ─── HISTÓRICO ───────────────────────────────────────────────
+function renderKitHistorico(){
+  const kitsDoTipo=_kits.filter(k=>k.tipo===_kitTipo).map(k=>k.id);
+  const caus=_cautelas.filter(c=>kitsDoTipo.includes(c.kitId)).sort((a,b)=>b.ts-a.ts);
+  const auds=_auditorias.filter(a=>kitsDoTipo.includes(a.kitId)).sort((a,b)=>b.ts-a.ts);
+  const wrap=document.getElementById('kitConteudo');
+  const tipoCor={entrega:'#059669',devolucao:'#F37021',auditoria:'#7c3aed'};
+  const tipoLabel={entrega:'Entrega','devolucao':'Devolução',auditoria:'Auditoria'};
+  // Unir cautelas e auditorias
+  const todos=[
+    ...caus.map(c=>({...c,_tipo:c.tipo})),
+    ...auds.map(a=>({...a,_tipo:'auditoria'}))
+  ].sort((a,b)=>b.ts-a.ts);
+  wrap.innerHTML=`<div class="table-wrap"><table class="data-table">
+    <thead><tr><th>Data</th><th>Kit</th><th>Tipo</th><th>Responsável</th><th>Auditoria</th><th>Detalhes</th></tr></thead>
+    <tbody>${todos.length?todos.map((ev,i)=>{
+      const falt=ev._tipo==='auditoria'?(ev.itens||[]).filter(it=>it.condicao==='faltando').length:0;
+      const quebr=ev._tipo==='auditoria'?(ev.itens||[]).filter(it=>it.condicao==='quebrado').length:0;
+      return`<tr style="background:${i%2?'#fff':'#fafbff'}">
+        <td style="font-size:11px">${ev.data?new Date(ev.data).toLocaleDateString('pt-BR'):'—'}</td>
+        <td style="font-family:monospace;font-weight:700">${ev.kitNumero}</td>
+        <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${tipoCor[ev._tipo]||'#94a3b8'}18;color:${tipoCor[ev._tipo]||'#94a3b8'}">${tipoLabel[ev._tipo]||ev._tipo}</span></td>
+        <td style="font-size:11px">${ev.responsavel||ev.auditor||'—'}</td>
+        <td style="font-size:11px">${ev._tipo==='auditoria'?`${falt?`<span style="color:#dc2626;font-weight:700">${falt} faltando</span> `:''}${quebr?`<span style="color:#d97706;font-weight:700">${quebr} quebrado(s)</span>`:''}${!falt&&!quebr?'✅ OK':''}`:ev.condicao||'—'}</td>
+        <td style="font-size:11px;color:var(--gray)">${ev.obs||''}</td>
+      </tr>`;
+    }).join(''):'<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--gray)">Nenhum registro encontrado.</td></tr>'}
+    </tbody></table></div>`;
+}
+
+// ─── FERRAMENTARIA (compartilhadas) ──────────────────────────
+function renderFerramentaria(){
+  // Alias para a página de ferramentas compartilhadas
+  const ferrs=Object.values(STATE.ferramentas||{}).filter(f=>f!=null&&f.tipo==='compartilhada');
+  const mc=document.getElementById('mainContent');
+  mc.innerHTML=`<div style="margin-bottom:12px;color:var(--text2);font-size:13px">${ferrs.length} ferramenta(s) compartilhada(s)</div>
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <input type="text" id="fcompBusca" placeholder="Buscar..." oninput="filtrarFComp()" style="padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;flex:1;min-width:200px;outline:none">
+    <button class="btn btn-primary" onclick="openModalRetirada()">📤 Nova Retirada</button>
+    <button class="btn btn-outline" onclick="openModalDevolucao()">📥 Devolução</button>
+    ${isAdmin()?`<button class="btn btn-outline" onclick="openModalFerramenta()">+ Cadastrar</button>`:''}
+  </div>
+  <div id="fcompTabela" class="table-wrap"></div>`;
+  filtrarFComp();
+}
+
+function filtrarFComp(){
+  const q=(document.getElementById('fcompBusca')?.value||'').toLowerCase();
+  const ferrs=Object.values(STATE.ferramentas||{}).filter(f=>f!=null&&f.tipo==='compartilhada'&&(!q||(f.codigo||'').toLowerCase().includes(q)||(f.descricao||'').toLowerCase().includes(q)));
+  const wrap=document.getElementById('fcompTabela'); if(!wrap)return;
+  wrap.innerHTML=`<table class="data-table"><thead><tr><th>Código</th><th>Descrição</th><th>Categoria</th><th>Condição</th><th>Status</th><th>Ações</th></tr></thead><tbody>
+  ${ferrs.length?ferrs.map((f,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'}">
+    <td style="font-family:monospace;font-weight:600">${f.codigo||'—'}</td>
+    <td>${f.descricao||'—'}</td>
+    <td>${f.categoria||'—'}</td>
+    <td>${f.condicao||'—'}</td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:4px;background:${f.ativo!==false?'#d1fae5':'#fee2e2'};color:${f.ativo!==false?'#059669':'#dc2626'};font-weight:700">${f.ativo!==false?'Ativa':'Inativa'}</span></td>
+    <td><button class="btn-icon" onclick="openModalRetiradaFerr('${f.id}')" title="Retirada">📤</button></td>
+  </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--gray)">Nenhuma ferramenta compartilhada.</td></tr>'}
+  </tbody></table>`;
+}
+
+function openModalRetiradaFerr(ferrId){
+  const f=Object.values(STATE.ferramentas||{}).find(x=>x&&x.id===ferrId);
+  if(f){document.getElementById('rBusca').value=f.codigo+' - '+f.descricao; buscarFerramentaRetirada();}
+  openModal('modalRetirada');
+}
+
+// Helper sig pad para kits
+function initSigPad(canvasId){
+  const canvas=document.getElementById(canvasId); if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  canvas.width=canvas.offsetWidth||canvas.clientWidth||canvas.parentElement.clientWidth;
+  let drawing=false;
+  const getPos=e=>{const r=canvas.getBoundingClientRect();const pt=e.touches?e.touches[0]:e;return{x:(pt.clientX-r.left)*(canvas.width/r.width),y:(pt.clientY-r.top)*(canvas.height/r.height)};};
+  canvas.addEventListener('mousedown',e=>{drawing=true;const p=getPos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
+  canvas.addEventListener('mousemove',e=>{if(!drawing)return;const p=getPos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1e293b';ctx.lineWidth=2;ctx.lineCap='round';ctx.stroke();});
+  canvas.addEventListener('mouseup',()=>drawing=false);
+  canvas.addEventListener('touchstart',e=>{e.preventDefault();drawing=true;const p=getPos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
+  canvas.addEventListener('touchmove',e=>{e.preventDefault();if(!drawing)return;const p=getPos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1e293b';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.stroke();},{passive:false});
+  canvas.addEventListener('touchend',()=>drawing=false);
 }
 </script>
 </body>
