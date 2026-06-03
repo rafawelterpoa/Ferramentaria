@@ -1249,24 +1249,29 @@ function openModalFerramenta(id) {
   STATE.editFerramentaId = id||null;
   const title = document.getElementById('modalFerramentaTitle');
 
-  if (id && STATE.ferramentas[id]) {
-    const f = STATE.ferramentas[id];
+  // Buscar por chave direta OU por f.id dentro dos valores
+  const ferr = STATE.ferramentas[id] || Object.values(STATE.ferramentas||{}).find(f=>f&&f.id===id);
+  if (id && ferr) {
+    const f = ferr;
     title.textContent = 'Editar Ferramenta';
+    // Texto simples
     document.getElementById('fCodigo').value = f.codigo||'';
     document.getElementById('fDesc').value = f.descricao||'';
     document.getElementById('fCategoria').value = f.categoria||'';
-    document.getElementById('fTipo').value = f.tipo||'';
     document.getElementById('fKit').value = f.kit||'';
     document.getElementById('fResponsavel').value = f.responsavel||'';
-    document.getElementById('fOficina').value = f.oficina||'';
     document.getElementById('fMarca').value = f.marca||'';
     document.getElementById('fModelo').value = f.modelo||'';
     document.getElementById('fNSerie').value = f.nSerie||'';
-    document.getElementById('fCondicao').value = f.condicao||'boa';
-    document.getElementById('fRequerCalib').checked = !!f.requerCalibracao;
+    document.getElementById('fObs').value = f.obs||'';
     document.getElementById('fUltCalib').value = f.ultimaCalibracao||'';
     document.getElementById('fProxCalib').value = f.proximaCalibracao||'';
-    document.getElementById('fObs').value = f.obs||'';
+    // Selects — forçar valor mesmo sem opção exata
+    const setSelect=(selId,val)=>{const s=document.getElementById(selId);if(!s)return;s.value=val||'';if(s.value!==val&&val){const o=document.createElement('option');o.value=val;o.textContent=val;s.appendChild(o);s.value=val;}};
+    setSelect('fTipo',f.tipo||'');
+    setSelect('fOficina',f.oficina||'');
+    setSelect('fCondicao',f.condicao||'boa');
+    document.getElementById('fRequerCalib').checked = !!f.requerCalibracao;
     onTipoChange();
     onCalibChange();
   } else {
