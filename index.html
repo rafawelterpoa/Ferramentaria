@@ -2722,24 +2722,27 @@ function filtrarCatalogo(){
 }
 
 function abrirFormCatalogo(id){
+  document.getElementById('modalCatForm')?.remove();
   const it = id?_catalogo.find(c=>c.id===id):null;
-  const wrap = document.getElementById('catFormWrap');
-  if(!wrap)return;
-  wrap.innerHTML=`<div class="modal-overlay" id="modalCatForm" style="display:flex">
-    <div class="modal-box" style="max-width:480px">
-      <div class="modal-header"><h3>${it?'Editar':'Nova'} Ferramenta</h3><button class="modal-close" onclick="document.getElementById('modalCatForm').remove()">×</button></div>
-      <div class="modal-body">
-        <label class="form-label">Código</label><input class="form-control" id="catCod" value="${it?.codigo||''}" placeholder="Ex: 100">
-        <label class="form-label" style="margin-top:10px">Descrição *</label><input class="form-control" id="catDesc" value="${it?.descricao||''}" placeholder="Nome da ferramenta">
-        <label class="form-label" style="margin-top:10px">Custo (R$)</label><input class="form-control" id="catCusto" type="number" step="0.01" value="${it?.custo||''}" placeholder="0,00">
-        <input type="hidden" id="catEditId" value="${id||''}">
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="document.getElementById('modalCatForm').remove()">Cancelar</button>
-        <button class="btn btn-primary" onclick="salvarCatalogo()">💾 Salvar</button>
-      </div>
+  const div=document.createElement('div');
+  div.className='modal-overlay'; div.id='modalCatForm'; div.style.display='flex';
+  div.innerHTML=`<div class="modal-box" style="max-width:480px">
+    <div class="modal-header"><h3>${it?'✏️ Editar':'+ Nova'} Ferramenta do Catálogo</h3><button class="modal-close" onclick="document.getElementById('modalCatForm').remove()">×</button></div>
+    <div class="modal-body">
+      <label class="form-label">Código</label>
+      <input class="form-control" id="catCod" value="${it?.codigo||''}" placeholder="Ex: 100" style="font-family:monospace">
+      <label class="form-label" style="margin-top:10px">Descrição *</label>
+      <input class="form-control" id="catDesc" value="${it?.descricao||''}" placeholder="Nome da ferramenta">
+      <label class="form-label" style="margin-top:10px">Custo (R$)</label>
+      <input class="form-control" id="catCusto" type="number" step="0.01" value="${it?.custo||''}" placeholder="0,00">
+      <input type="hidden" id="catEditId" value="${id||''}">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="document.getElementById('modalCatForm').remove()">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarCatalogo()">💾 Salvar</button>
     </div>
   </div>`;
+  document.body.appendChild(div);
 }
 
 function editarCatalogo(id){ abrirFormCatalogo(id); }
@@ -2802,35 +2805,67 @@ function lerArquivoCatalogo(file){
 }
 
 function confirmarImportCatalogo(parsed,sheetName){
-  const mc=document.getElementById('mainContent');
-  const prev=parsed.slice(0,10);
+  // Deduplicar: manter apenas o primeiro de cada descrição (case-insensitive)
+  const vistos=new Set();
+  const unicos=[]; const duplic=[];
+  parsed.forEach(p=>{
+    const chave=(p.codigo||'')+'|'+(p.descricao||'').toLowerCase().trim();
+    if(!vistos.has(chave)){vistos.add(chave);unicos.push(p);}
+    else duplic.push(p);
+  });
+  // Checar quantos já existem no catálogo atual
+  const codigosExist=new Set(_catalogo.map(c=>c.codigo));
+  const descExist=new Set(_catalogo.map(c=>(c.descricao||'').toLowerCase().trim()));
+  const novosReal=unicos.filter(p=>!codigosExist.has(p.codigo)&&!descExist.has((p.descricao||'').toLowerCase().trim()));
+
   const div=document.createElement('div');
   div.id='catImportPreview';
   div.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
-  div.innerHTML=`<div style="background:#fff;border-radius:12px;padding:24px;width:600px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h3 style="margin-bottom:8px">📥 Importar Catálogo</h3>
-    <p style="color:#64748b;font-size:12px;margin-bottom:12px">Aba: <strong>${sheetName}</strong> — <strong>${parsed.length}</strong> ferramentas encontradas (10 primeiras abaixo)</p>
-    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px">
-      <thead><tr style="background:#0f172a;color:#fff"><th style="padding:6px 10px;text-align:left">Código</th><th style="padding:6px 10px;text-align:left">Descrição</th><th style="padding:6px 10px;text-align:right">Custo</th></tr></thead>
-      <tbody>${prev.map((r,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'}"><td style="padding:5px 10px;font-family:monospace">${r.codigo}</td><td style="padding:5px 10px">${r.descricao}</td><td style="padding:5px 10px;text-align:right">${r.custo?'R$ '+r.custo.toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}</td></tr>`).join('')}</tbody>
+  div.innerHTML=`<div style="background:#fff;border-radius:12px;padding:24px;width:640px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <h3 style="margin-bottom:12px">📥 Importar Catálogo — ${sheetName}</h3>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+      <div style="background:#f0fdf4;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:900;color:#059669">${novosReal.length}</div>
+        <div style="font-size:10px;color:#16a34a;font-weight:600">NOVOS para importar</div>
+      </div>
+      <div style="background:#fef9c3;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:900;color:#ca8a04">${duplic.length}</div>
+        <div style="font-size:10px;color:#ca8a04;font-weight:600">DUPLICADOS removidos</div>
+      </div>
+      <div style="background:#f8fafc;border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:22px;font-weight:900;color:#64748b">${parsed.length-novosReal.length-duplic.length}</div>
+        <div style="font-size:10px;color:#64748b;font-weight:600">JÁ existem no catálogo</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:8px">Primeiros 10 itens novos:</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:16px">
+      <thead><tr style="background:#0f172a;color:#fff"><th style="padding:5px 8px;text-align:left">Código</th><th style="padding:5px 8px;text-align:left">Descrição</th><th style="padding:5px 8px;text-align:right">Custo</th></tr></thead>
+      <tbody>${novosReal.slice(0,10).map((r,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'}">
+        <td style="padding:4px 8px;font-family:monospace">${r.codigo||'—'}</td>
+        <td style="padding:4px 8px">${r.descricao}</td>
+        <td style="padding:4px 8px;text-align:right">${r.custo?'R$ '+r.custo.toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}</td>
+      </tr>`).join('')}</tbody>
     </table>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-outline" onclick="document.getElementById('catImportPreview').remove()">Cancelar</button>
-      <button class="btn btn-primary" onclick="executarImportCatalogo()">✅ Importar ${parsed.length} ferramentas</button>
+      <button class="btn btn-primary" onclick="executarImportCatalogo()" ${!novosReal.length?'disabled':''}>
+        ✅ ${novosReal.length?`Importar ${novosReal.length} ferramentas`:'Nada novo para importar'}
+      </button>
     </div>
   </div>`;
-  div._dados=parsed;
+  div._dados=novosReal;
   document.body.appendChild(div);
 }
 
 async function executarImportCatalogo(){
   const div=document.getElementById('catImportPreview');
-  if(!div)return;
+  if(!div||!div._dados.length)return;
   const parsed=div._dados;
   const btn=div.querySelector('button.btn-primary');
   btn.textContent='Importando...'; btn.disabled=true;
-  // Salvar em lote
-  const obj={}; parsed.forEach(p=>{obj[p.id]=p;}); _catalogo=[..._catalogo,...parsed];
+  const obj={};
+  parsed.forEach(p=>{obj[p.id]=p;});
+  _catalogo=[..._catalogo,...parsed];
   await fetch(FB_CATALOGO+'.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
   div.remove();
   showToast(`✅ ${parsed.length} ferramentas importadas!`,'success');
