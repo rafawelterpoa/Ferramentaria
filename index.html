@@ -1943,8 +1943,28 @@ function lerArquivoImport(input) {
         data = parseCsvImport(e.target.result);
       } else {
         const wb = XLSX.read(e.target.result, {type:'binary'});
-        const ws = wb.Sheets[wb.SheetNames[0]];
+        // Escolher a aba mais adequada:
+        // 1) procura aba com "ferramenta" ou "lista" no nome
+        // 2) procura aba com mais linhas (mais provável ser dados)
+        // 3) fallback: primeira aba
+        const COLS_ESPERADAS = ['codigo','cod','descri','tipo','kit','oficina','responsavel','marca','modelo'];
+        let melhorSheet = wb.SheetNames[0];
+        let melhorScore = -1;
+        for (const nome of wb.SheetNames) {
+          const wsTest = wb.Sheets[nome];
+          const rowsTest = XLSX.utils.sheet_to_json(wsTest, {header:1,defval:'',range:0});
+          if (!rowsTest.length) continue;
+          // Pegar header da primeira linha com dados
+          const header = rowsTest.find(r=>r.some(c=>String(c).trim()))||[];
+          const headerStr = header.map(h=>_normCol(h)).join(' ');
+          let score = 0;
+          COLS_ESPERADAS.forEach(col=>{ if(headerStr.includes(col)) score+=2; });
+          if(_normCol(nome).includes('ferramenta')||_normCol(nome).includes('lista')) score+=3;
+          if(score > melhorScore){ melhorScore=score; melhorSheet=nome; }
+        }
+        const ws = wb.Sheets[melhorSheet];
         data = XLSX.utils.sheet_to_json(ws, {defval:''});
+        if(wb.SheetNames.length>1) console.log('[Import] Aba selecionada:', melhorSheet, 'de', wb.SheetNames.join(', '));
       }
       processarImport(data);
     } catch(err) {
