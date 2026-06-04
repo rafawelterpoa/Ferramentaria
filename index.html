@@ -3309,28 +3309,58 @@ async function deletarModelo(id){
 
 // ─── KITS FÍSICOS ────────────────────────────────────────────
 function renderKitsFisicos(){
-  const kits=_kits.filter(k=>k.tipo===_kitTipo);
+  const allKits=_kits.filter(k=>k.tipo===_kitTipo);
+  // Filtros reativos
+  const _kBusca=(document.getElementById('kitBusca')?.value||'').toLowerCase();
+  const _kStatus=document.getElementById('kitFiltroStatus')?.value||'';
+  const _kOp=document.getElementById('kitFiltroOp')?.value||'';
+  const kits=allKits.filter(k=>
+    (!_kBusca||(k.numero||'').toLowerCase().includes(_kBusca)||(k.responsavel||'').toLowerCase().includes(_kBusca)||(k.matricula||'').includes(_kBusca)||(k.operacao||'').toLowerCase().includes(_kBusca))&&
+    (!_kStatus||k.status===_kStatus)&&
+    (!_kOp||k.operacao===_kOp)
+  );
   const wrap=document.getElementById('kitConteudo');
-  const statusCor={disponivel:'#059669',entregue:'#F37021',auditoria:'#7c3aed'};
-  const statusLabel={disponivel:'Disponível',entregue:'Entregue',auditoria:'Em Auditoria'};
+  const statusCor={disponivel:'#059669',entregue:'#F37021',auditoria:'#7c3aed',estoque:'#64748b'};
+  const statusLabel={disponivel:'Disponível',entregue:'Entregue',auditoria:'Em Auditoria',estoque:'Estoque'};
+  const ops=[...new Set(allKits.map(k=>k.operacao).filter(Boolean))].sort();
   wrap.innerHTML=`
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-    <div style="font-size:13px;color:var(--text2)">${kits.length} kit(s) cadastrado(s)</div>
-    ${isAdmin()?`<button class="btn btn-primary" onclick="abrirFormKit()">+ Novo Kit</button>`:''}
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1">
+      <input id="kitBusca" oninput="renderKitsFisicos()" placeholder="🔍 Nº caixa, mecânico, matrícula, operação..." value="${_kBusca}" style="padding:7px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;flex:1;min-width:220px;outline:none">
+      <select id="kitFiltroStatus" onchange="renderKitsFisicos()" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:#fff">
+        <option value="">Status — Todos</option>
+        <option value="entregue" ${_kStatus==='entregue'?'selected':''}>Entregue</option>
+        <option value="disponivel" ${_kStatus==='disponivel'?'selected':''}>Disponível</option>
+        <option value="estoque" ${_kStatus==='estoque'?'selected':''}>Estoque</option>
+        <option value="auditoria" ${_kStatus==='auditoria'?'selected':''}>Em Auditoria</option>
+      </select>
+      <select id="kitFiltroOp" onchange="renderKitsFisicos()" style="padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:#fff;max-width:200px">
+        <option value="">Operação — Todas</option>
+        ${ops.map(o=>`<option ${_kOp===o?'selected':''}>${o}</option>`).join('')}
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:12px;color:var(--text2)">${kits.length}/${allKits.length} kit(s)</span>
+      ${isAdmin()?`<button class="btn btn-primary" onclick="abrirFormKit()">+ Novo Kit</button>`:''}
+    </div>
   </div>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th>Número</th><th>Modelo</th><th>Responsável</th><th>Gestor</th><th>Operação</th><th>Oficina</th><th>Status</th><th>Próx. Auditoria</th><th>Ações</th></tr></thead>
+    <thead><tr><th>Número</th><th>Modelo</th><th>Responsável</th><th>Matrícula</th><th>Operação</th><th>Status</th><th>Próx. Auditoria</th><th>Ações</th></tr></thead>
     <tbody>${kits.length?kits.map(k=>{
       const audDias=k.proximaAuditoria?Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000):null;
       const audCor=audDias===null?'#94a3b8':audDias<0?'#dc2626':audDias<=7?'#d97706':audDias<=30?'#ca8a04':'#059669';
       const audTxt=audDias===null?'—':audDias<0?`Vencida ${Math.abs(audDias)}d`:`${new Date(k.proximaAuditoria+'T00:00').toLocaleDateString('pt-BR')}`;
-      return `<tr>
-      <td style="font-family:monospace;font-weight:700;font-size:14px">${k.numero||'—'}</td>
-      <td style="font-size:11px">${k.modeloNome||'—'}</td>
-      <td style="font-size:11px">${k.responsavel||'—'}</td>
-      <td style="font-size:11px;color:#64748b">${k.gestor||'—'}</td>
-      <td style="font-size:11px;color:#64748b;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${k.operacao||''}">${k.operacao||'—'}</td>
-      <td style="font-size:11px">${k.oficina||'—'}</td>
+      const semMecanico=!k.responsavel||(k.responsavel||'').startsWith('(Mat:');
+      return `<tr style="background:${semMecanico&&k.status!=='estoque'?'#fffbeb':''}">
+      <td style="font-family:monospace;font-weight:700;font-size:13px">${k.numero||'—'}</td>
+      <td style="font-size:10px;color:#64748b">${k.modeloNome||'—'}</td>
+      <td style="font-size:11px${semMecanico?';color:#d97706;font-style:italic':''}">
+        ${k.status==='estoque'?'<span style="color:#94a3b8">— em estoque —</span>':
+          semMecanico?`⚠ Mecânico não localizado<div style="font-size:9px;font-family:monospace;color:#64748b">Mat: ${k.matricula}</div>`:
+          k.responsavel||'—'}
+      </td>
+      <td style="font-size:10px;font-family:monospace;color:#64748b">${k.matricula||'—'}</td>
+      <td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${k.operacao||''}">${k.operacao||'—'}</td>
       <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${statusCor[k.status]||'#94a3b8'}18;color:${statusCor[k.status]||'#94a3b8'}">${statusLabel[k.status]||k.status||'—'}</span></td>
       <td style="font-size:11px;font-weight:600;color:${audCor}">${audTxt}</td>
       <td style="white-space:nowrap">
