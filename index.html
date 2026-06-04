@@ -1709,20 +1709,27 @@ function selecionarFerrModalRet(id) {
   if (f.oficina) document.getElementById('rOficina').value=f.oficina;
 }
 
-function popularSelectsRetirada() {
-  // Preencher Responsável e Operador com colaboradores + usuários
-  const nomes = [...new Set([
-    ...(_colabs||[]).map(c=>c.nome).filter(Boolean),
-    ...(usuariosCache||[]).map(u=>u.nome).filter(Boolean)
-  ])].sort();
-  const opts = '<option value="">Selecione...</option>'+nomes.map(n=>`<option>${n}</option>`).join('');
-  const rR=document.getElementById('rResponsavel');
-  const rO=document.getElementById('rOperador');
-  if(rR&&rR.options.length<=1) rR.innerHTML=opts;
-  if(rO&&rO.options.length<=1) rO.innerHTML=opts;
-  // Data/hora padrão
+async function popularSelectsRetirada() {
+  // Carregar colaboradores se ainda não carregados
+  if(!_colabs||!_colabs.length) await loadColabs();
+
+  // Fontes de nomes: colaboradores (headcount) + usuários do sistema
+  const nomesColabs = (_colabs||[]).map(c=>c.nome).filter(Boolean);
+  const nomesUsers  = (STATE.usuarios||[]).map(u=>u.nome).filter(Boolean);
+  const nomes = [...new Set([...nomesColabs,...nomesUsers])].sort((a,b)=>a.localeCompare(b,'pt'));
+
+  const opts = '<option value="">Selecione...</option>'+nomes.map(n=>`<option value="${n}">${n}</option>`).join('');
+  ['rResponsavel','rOperador'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){ el.innerHTML=opts; }
+  });
+
+  // Data/hora padrão = agora
   const dtEl=document.getElementById('rDataHora');
-  if(dtEl&&!dtEl.value){const n=new Date();dtEl.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0')+'T'+String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');}
+  if(dtEl){
+    const n=new Date();
+    dtEl.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0')+'T'+String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');
+  }
 }
 
 async function confirmarRetirada() {
