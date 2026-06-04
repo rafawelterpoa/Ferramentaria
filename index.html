@@ -3850,11 +3850,13 @@ function filtrarFComp(){
 }
 
 function openModalRetirada(){
-  STATE.retFerramentaId=null;
-  document.getElementById('rBusca').value='';
-  document.getElementById('rFerramentaInfo').style.display='none';
-  document.getElementById('rBuscaResultados').style.display='none';
-  clearSig('sigCanvas');
+  try{
+    STATE.retFerramentaId=null;
+    const rb=document.getElementById('rBusca'); if(rb) rb.value='';
+    const fi=document.getElementById('rFerramentaInfo'); if(fi) fi.style.display='none';
+    const br=document.getElementById('rBuscaResultados'); if(br) br.style.display='none';
+    clearSig('sigCanvas');
+  }catch(e){console.warn('openModalRetirada init:',e);}
   popularSelectsRetirada();
   openModal('modalRetirada');
 }
