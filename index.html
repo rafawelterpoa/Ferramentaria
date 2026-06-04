@@ -3549,7 +3549,9 @@ function renderKitsFisicos(){
 function criarKitDeModelo(modeloId){ abrirFormKit(null,modeloId); }
 function editarKit(id){ abrirFormKit(id); }
 
-function abrirFormKit(id,modeloIdPre){
+async function abrirFormKit(id,modeloIdPre){
+  // Garantir colabs carregados
+  if(!_colabs||!_colabs.length) await loadColabs();
   const kit=id?_kits.find(k=>k.id===id):null;
   const mods=_modelos.filter(m=>m.tipo===_kitTipo);
   const overlay=document.createElement('div');
@@ -3565,10 +3567,12 @@ function abrirFormKit(id,modeloIdPre){
         </select></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
-        <div><label class="form-label">Responsável</label><select class="form-control" id="kitResp">
-          <option value="">— Selecione —</option>
-          ${(_colabs||[]).map(c=>`<option ${kit?.responsavel===c.nome?'selected':''}>${c.nome}</option>`).join('')}
-        </select></div>
+        <div><label class="form-label">Responsável</label>
+          <input class="form-control" id="kitResp" list="kitRespList" value="${kit?.responsavel||''}" placeholder="Digite para buscar..." autocomplete="off">
+          <datalist id="kitRespList">
+            ${(_colabs||[]).map(c=>`<option value="${c.nome||''}">${c.matricula?' ['+c.matricula+']':''}</option>`).join('')}
+          </datalist>
+        </div>
         <div><label class="form-label">Oficina</label><select class="form-control" id="kitOficina">
           <option value="">— Selecione —</option>
           ${OFICINAS.map(o=>`<option ${kit?.oficina===o?'selected':''}>${o}</option>`).join('')}
@@ -3614,7 +3618,9 @@ async function salvarKit(){
   const mod=_modelos.find(m=>m.id===modeloId);
   const prazoMeses=parseInt(document.getElementById('kitPrazoAuditoria')?.value)||0;
   const proximaAuditoria=prazoMeses?new Date(Date.now()+prazoMeses*30*24*3600*1000).toISOString().split('T')[0]:'';
-  const obj={numero,modeloId,modeloNome:mod?.nome||'',tipo:_kitTipo,responsavel:document.getElementById('kitResp')?.value||'',oficina:document.getElementById('kitOficina')?.value||'',gestor:document.getElementById('kitGestor')?.value||'',operacao:(document.getElementById('kitOperacao')?.value||'').trim(),status:'disponivel',prazoAuditoriaMeses:prazoMeses,proximaAuditoria:proximaAuditoria};
+  const editId2=document.getElementById('kitEditId')?.value||'';
+  const kitExist=editId2?_kits.find(k=>k.id===editId2):null;
+  const obj={numero,modeloId,modeloNome:mod?.nome||'',tipo:_kitTipo,responsavel:document.getElementById('kitResp')?.value||'',oficina:document.getElementById('kitOficina')?.value||'',gestor:document.getElementById('kitGestor')?.value||'',operacao:(document.getElementById('kitOperacao')?.value||'').trim(),status:kitExist?.status||'disponivel',prazoAuditoriaMeses:prazoMeses,proximaAuditoria:proximaAuditoria||kitExist?.proximaAuditoria||''};
   const editId=document.getElementById('kitEditId')?.value||'';
   if(editId){obj.id=editId;const idx=_kits.findIndex(k=>k.id===editId);if(idx>=0)_kits[idx]={..._kits[idx],...obj};}
   else{obj.id=geId2('KIT');obj.ts=Date.now();_kits.push(obj);}
