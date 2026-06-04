@@ -1709,6 +1709,60 @@ function selecionarFerrModalRet(id) {
   if (f.oficina) document.getElementById('rOficina').value=f.oficina;
 }
 
+function popularSelectsRetirada() {
+  // Preencher Responsável e Operador com colaboradores + usuários
+  const nomes = [...new Set([
+    ...(_colabs||[]).map(c=>c.nome).filter(Boolean),
+    ...(usuariosCache||[]).map(u=>u.nome).filter(Boolean)
+  ])].sort();
+  const opts = '<option value="">Selecione...</option>'+nomes.map(n=>`<option>${n}</option>`).join('');
+  const rR=document.getElementById('rResponsavel');
+  const rO=document.getElementById('rOperador');
+  if(rR&&rR.options.length<=1) rR.innerHTML=opts;
+  if(rO&&rO.options.length<=1) rO.innerHTML=opts;
+  // Data/hora padrão
+  const dtEl=document.getElementById('rDataHora');
+  if(dtEl&&!dtEl.value){const n=new Date();dtEl.value=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0')+'T'+String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');}
+}
+
+async function confirmarRetirada() {
+  const ferrId = STATE.retFerramentaId;
+  if(!ferrId){showToast('Selecione uma ferramenta.','error');return;}
+  const responsavel = document.getElementById('rResponsavel')?.value||'';
+  const finalidade  = (document.getElementById('rFinalidade')?.value||'').trim();
+  if(!responsavel||!finalidade){showToast('Preencha responsável e finalidade.','error');return;}
+  const sig = getSig('sigCanvas');
+  if(!sig){showToast('Assinatura obrigatória.','error');return;}
+  const f = STATE.ferramentas[ferrId]||Object.values(STATE.ferramentas||{}).find(x=>x&&x.id===ferrId);
+  if(!f){showToast('Ferramenta não encontrada.','error');return;}
+  const emAberto = movimentacoesList().find(m=>m.ferramentaId===ferrId&&!m.devolvido);
+  if(emAberto){showToast('Esta ferramenta já está em empréstimo!','error');return;}
+  const dtVal = document.getElementById('rDataHora')?.value;
+  const dtFmt = dtVal ? fmtDateTime(new Date(dtVal)) : fmtDateTime(Date.now());
+  const id='MV_'+Date.now();
+  const mov={
+    id,ferramentaId:ferrId,ferramentaCodigo:f.codigo,ferramentaDesc:f.descricao,
+    tipo:'retirada',responsavel,operador:document.getElementById('rOperador')?.value||'',
+    oficina:document.getElementById('rOficina')?.value||'',finalidade,
+    dataHora:dtFmt,ts:Date.now(),assinatura:sig,devolvido:false,
+    dataHoraDevolucao:'',assinaturaDevolucao:''
+  };
+  try{
+    await fbSet(`movimentacoes/${id}`,mov);
+    STATE.movimentacoes[id]=mov;
+    LS.set('movimentacoes',STATE.movimentacoes);
+    STATE.retFerramentaId=null;
+    clearSig('sigCanvas');
+    document.getElementById('rBusca').value='';
+    document.getElementById('rFerramentaInfo').style.display='none';
+    document.getElementById('rResponsavel').value='';
+    document.getElementById('rFinalidade').value='';
+    closeModal('modalRetirada');
+    showToast('✅ Retirada registrada!','success');
+    renderMovimentacoes();
+  }catch(e){showToast('Erro: '+e.message,'error');}
+}
+
 async function confirmarRetiradaInline() {
   if (!retFerrIdInline) { showToast('Selecione uma ferramenta.','error'); return; }
   const responsavel = document.getElementById('rResponsavelInline').value;
@@ -3788,9 +3842,20 @@ function filtrarFComp(){
   </tbody></table>`;
 }
 
+function openModalRetirada(){
+  STATE.retFerramentaId=null;
+  document.getElementById('rBusca').value='';
+  document.getElementById('rFerramentaInfo').style.display='none';
+  document.getElementById('rBuscaResultados').style.display='none';
+  clearSig('sigCanvas');
+  popularSelectsRetirada();
+  openModal('modalRetirada');
+}
+
 function openModalRetiradaFerr(ferrId){
   const f=Object.values(STATE.ferramentas||{}).find(x=>x&&x.id===ferrId);
   if(f){document.getElementById('rBusca').value=f.codigo+' - '+f.descricao; buscarFerramentaRetirada();}
+  popularSelectsRetirada();
   openModal('modalRetirada');
 }
 
