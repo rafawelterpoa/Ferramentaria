@@ -1029,7 +1029,9 @@ function movimentacoesList() { return Object.values(STATE.movimentacoes||{}).fil
 function isAdmin() { return ['master','admin'].includes(STATE.usuario?.perfil) }
 
 // ===================== DASHBOARD =====================
-function renderDashboard() {
+async function renderDashboard() {
+  // Carregar kits se não carregados ainda
+  if(!_kits||!_kits.length) await loadKits();
   const ferrs = ferramentasList();
   const movs = movimentacoesList();
 
@@ -1103,6 +1105,44 @@ function renderDashboard() {
         </table>
       </div>
     </div>
+
+    ${(()=>{
+      const kitsAlerta=(_kits||[]).filter(k=>k.proximaAuditoria).map(k=>({
+        ...k,
+        diasRestantes:Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000)
+      })).sort((a,b)=>a.diasRestantes-b.diasRestantes).slice(0,10);
+      return kitsAlerta.length ? `
+<div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:18px;margin-top:20px">
+  <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+    🔔 Auditorias de Kits
+    <span style="font-size:11px;font-weight:400;color:#64748b">${kitsAlerta.length} kit(s) monitorado(s)</span>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead><tr style="background:#f8fafc">
+      <th style="padding:7px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Kit</th>
+      <th style="padding:7px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Modelo</th>
+      <th style="padding:7px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Responsável</th>
+      <th style="padding:7px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Próxima Auditoria</th>
+      <th style="padding:7px 12px;text-align:left;border-bottom:1px solid #e2e8f0">Status</th>
+    </tr></thead>
+    <tbody>
+    ${kitsAlerta.map((k,i)=>{
+      const d=k.diasRestantes;
+      const cor=d<0?'#dc2626':d<=7?'#d97706':d<=30?'#ca8a04':'#059669';
+      const bg=d<0?'#fef2f2':d<=7?'#fff7ed':d<=30?'#fefce8':'#f0fdf4';
+      const txt=d<0?`Vencida há ${Math.abs(d)} dias`:d===0?'Vence hoje':d<=7?`Vence em ${d} dias`:d<=30?`Vence em ${d} dias`:`Em ${d} dias`;
+      return `<tr style="background:${i%2?'#fff':'#fafbff'};border-bottom:1px solid #f1f5f9">
+        <td style="padding:7px 12px;font-family:monospace;font-weight:700">${k.numero}</td>
+        <td style="padding:7px 12px">${k.modeloNome||'—'}</td>
+        <td style="padding:7px 12px">${k.responsavel||'—'}</td>
+        <td style="padding:7px 12px">${k.proximaAuditoria?new Date(k.proximaAuditoria+'T00:00').toLocaleDateString('pt-BR'):'—'}</td>
+        <td style="padding:7px 12px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${bg};color:${cor}">${txt}</span></td>
+      </tr>`;
+    }).join('')}
+    </tbody>
+  </table>
+</div>` : '';
+    })()}
   `;
 }
 
@@ -2677,6 +2717,7 @@ const FB_CATALOGO = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentar
 const FB_MODELOS  = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/modelos_kit';
 const FB_KITS     = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/kits';
 const FB_CAUTELAS = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/cautelas';
+const FB_HISTORICO_KIT = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/historico_kit';
 const FB_AUDITORIAS = 'https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/auditorias';
 
 let _catalogo = [], _modelos = [], _kits = [], _cautelas = [], _auditorias = [];
@@ -3078,22 +3119,28 @@ function renderKitsFisicos(){
     <button class="btn btn-primary" onclick="abrirFormKit()">+ Novo Kit</button>
   </div>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th>Número</th><th>Modelo</th><th>Responsável</th><th>Oficina</th><th>Status</th><th>Entregue em</th><th>Ações</th></tr></thead>
-    <tbody>${kits.length?kits.map(k=>`<tr>
+    <thead><tr><th>Número</th><th>Modelo</th><th>Responsável</th><th>Oficina</th><th>Status</th><th>Próx. Auditoria</th><th>Ações</th></tr></thead>
+    <tbody>${kits.length?kits.map(k=>{
+      const audDias=k.proximaAuditoria?Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000):null;
+      const audCor=audDias===null?'#94a3b8':audDias<0?'#dc2626':audDias<=7?'#d97706':audDias<=30?'#ca8a04':'#059669';
+      const audTxt=audDias===null?'—':audDias<0?`Vencida ${Math.abs(audDias)}d`:`${new Date(k.proximaAuditoria+'T00:00').toLocaleDateString('pt-BR')}`;
+      return `<tr>
       <td style="font-family:monospace;font-weight:700;font-size:14px">${k.numero||'—'}</td>
       <td>${k.modeloNome||'—'}</td>
       <td>${k.responsavel||'—'}</td>
       <td>${k.oficina||'—'}</td>
       <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${statusCor[k.status]||'#94a3b8'}18;color:${statusCor[k.status]||'#94a3b8'}">${statusLabel[k.status]||k.status||'—'}</span></td>
-      <td style="font-size:11px;color:var(--gray)">${k.dataEntrega?new Date(k.dataEntrega).toLocaleDateString('pt-BR'):'—'}</td>
+      <td style="font-size:11px;font-weight:600;color:${audCor}">${audTxt}</td>
       <td style="white-space:nowrap">
         <button class="btn-icon" onclick="abrirCautela('${k.id}','entrega')" title="Cautela Entrega">📤</button>
         <button class="btn-icon" onclick="abrirCautela('${k.id}','devolucao')" title="Cautela Devolução">📥</button>
         <button class="btn-icon" onclick="abrirAuditoria('${k.id}')" title="Auditoria">🔍</button>
+        <button class="btn-icon" onclick="abrirHistoricoKit('${k.id}')" title="Histórico">📋</button>
         <button class="btn-icon" onclick="editarKit('${k.id}')" title="Editar">✏️</button>
         <button class="btn-icon danger" onclick="deletarKit('${k.id}')" title="Remover">🗑️</button>
       </td>
-    </tr>`).join(''):'<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--gray)">Nenhum kit cadastrado.</td></tr>'}
+    </tr>`;
+    }).join(''):'<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--gray)">Nenhum kit cadastrado.</td></tr>'}
     </tbody></table></div>`;
 }
 
@@ -3125,6 +3172,14 @@ function abrirFormKit(id,modeloIdPre){
           ${OFICINAS.map(o=>`<option ${kit?.oficina===o?'selected':''}>${o}</option>`).join('')}
         </select></div>
       </div>
+      <div style="margin-bottom:12px"><label class="form-label">Prazo de Auditoria</label>
+        <select class="form-control" id="kitPrazoAuditoria">
+          <option value="">Sem prazo definido</option>
+          <option value="3" ${kit?.prazoAuditoriaMeses===3?'selected':''}>3 meses</option>
+          <option value="6" ${kit?.prazoAuditoriaMeses===6?'selected':''}>6 meses</option>
+          <option value="12" ${kit?.prazoAuditoriaMeses===12?'selected':''}>12 meses</option>
+        </select>
+      </div>
       <input type="hidden" id="kitEditId" value="${id||''}">
     </div>
     <div class="modal-footer">
@@ -3141,7 +3196,9 @@ async function salvarKit(){
   if(!numero)return alert('Informe o número do kit.');
   if(!modeloId)return alert('Selecione um modelo.');
   const mod=_modelos.find(m=>m.id===modeloId);
-  const obj={numero,modeloId,modeloNome:mod?.nome||'',tipo:_kitTipo,responsavel:document.getElementById('kitResp')?.value||'',oficina:document.getElementById('kitOficina')?.value||'',status:'disponivel'};
+  const prazoMeses=parseInt(document.getElementById('kitPrazoAuditoria')?.value)||0;
+  const proximaAuditoria=prazoMeses?new Date(Date.now()+prazoMeses*30*24*3600*1000).toISOString().split('T')[0]:'';
+  const obj={numero,modeloId,modeloNome:mod?.nome||'',tipo:_kitTipo,responsavel:document.getElementById('kitResp')?.value||'',oficina:document.getElementById('kitOficina')?.value||'',status:'disponivel',prazoAuditoriaMeses:prazoMeses,proximaAuditoria:proximaAuditoria};
   const editId=document.getElementById('kitEditId')?.value||'';
   if(editId){obj.id=editId;const idx=_kits.findIndex(k=>k.id===editId);if(idx>=0)_kits[idx]={..._kits[idx],...obj};}
   else{obj.id=geId2('KIT');obj.ts=Date.now();_kits.push(obj);}
@@ -3229,6 +3286,9 @@ async function confirmarCautela(kitId,tipoCautela){
   await fetch(FB_CAUTELAS+'/'+cau.id+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cau)});
   document.getElementById('modalCautela')?.remove();
   showToast('✅ Cautela registrada!','success'); renderKitsFisicos();
+  // Oferecer impressão da cautela
+  const imprir = confirm('Cautela registrada! Deseja imprimir/salvar como PDF agora?');
+  if(imprir) gerarCautelaPDF(cau, kit);
 }
 
 // ─── AUDITORIA ───────────────────────────────────────────────
@@ -3398,6 +3458,202 @@ function initSigPad(canvasId){
   canvas.addEventListener('touchstart',e=>{e.preventDefault();drawing=true;const p=getPos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
   canvas.addEventListener('touchmove',e=>{e.preventDefault();if(!drawing)return;const p=getPos(e);ctx.lineTo(p.x,p.y);ctx.strokeStyle='#1e293b';ctx.lineWidth=2.5;ctx.lineCap='round';ctx.stroke();},{passive:false});
   canvas.addEventListener('touchend',()=>drawing=false);
+}
+
+// ─── HISTÓRICO DE MOVIMENTAÇÕES DO KIT ──────────────────────
+let _historicoKits = {};
+
+async function abrirHistoricoKit(kitId){
+  const kit = _kits.find(k=>k.id===kitId); if(!kit)return;
+  try{
+    const r=await fetch(`${FB_HISTORICO_KIT}/${kitId}.json`);
+    const d=await r.json();
+    _historicoKits[kitId]=d&&typeof d==='object'?Object.values(d).filter(Boolean).sort((a,b)=>b.ts-a.ts):[];
+  }catch(e){_historicoKits[kitId]=[];}
+
+  const hist=_historicoKits[kitId]||[];
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay'; overlay.id='modalHistKit'; overlay.style.display='flex';
+  overlay.innerHTML=`<div class="modal-box" style="max-width:700px;max-height:90vh;overflow-y:auto">
+    <div class="modal-header">
+      <h3>📋 Histórico — Kit ${kit.numero}</h3>
+      <button class="modal-close" onclick="document.getElementById('modalHistKit').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px">Registrar Movimentação</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">
+          <div><label class="form-label">Tipo *</label>
+            <select class="form-control" id="histTipo">
+              <option value="">— Selecione —</option>
+              <option value="reposicao">🔄 Reposição (perdida/danificada)</option>
+              <option value="adicao">➕ Adição (nova ferramenta)</option>
+              <option value="substituicao">🔃 Substituição</option>
+              <option value="reparo">🔧 Reparo/Conserto</option>
+              <option value="inventario">📦 Inventário</option>
+              <option value="obs">📝 Observação</option>
+            </select>
+          </div>
+          <div><label class="form-label">Data</label><input class="form-control" type="date" id="histData" value="${new Date().toISOString().split('T')[0]}"></div>
+          <div><label class="form-label">Autorizado por</label><input class="form-control" id="histAutorizador" placeholder="Nome do responsável"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px;margin-bottom:10px">
+          <div><label class="form-label">Cód. SAP</label><input class="form-control" id="histCodSap" placeholder="SAP" style="font-family:monospace"></div>
+          <div><label class="form-label">Ferramenta / Item</label><input class="form-control" id="histFerramenta" placeholder="Descrição da ferramenta"></div>
+          <div><label class="form-label">Qtd</label><input class="form-control" type="number" min="1" id="histQtd" value="1"></div>
+        </div>
+        <div style="margin-bottom:10px"><label class="form-label">Motivo / Observação</label><textarea class="form-control" id="histObs" rows="2" placeholder="Descreva o motivo ou detalhes..." style="resize:vertical"></textarea></div>
+        <button class="btn btn-primary" style="font-size:12px" onclick="salvarHistoricoKit('${kitId}')">💾 Registrar</button>
+      </div>
+
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px">${hist.length} evento(s) registrado(s)</div>
+      <div id="histKitLista">
+        ${hist.length ? hist.map(ev=>{
+          const tipoLabel={reposicao:'🔄 Reposição',adicao:'➕ Adição',substituicao:'🔃 Substituição',reparo:'🔧 Reparo',inventario:'📦 Inventário',obs:'📝 Observação'};
+          const corLabel={reposicao:'#d97706',adicao:'#059669',substituicao:'#7c3aed',reparo:'#2563eb',inventario:'#0f766e',obs:'#64748b'};
+          const cor=corLabel[ev.tipo]||'#64748b';
+          return `<div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:8px;border-left:4px solid ${cor}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+              <span style="font-size:11px;font-weight:700;color:${cor}">${tipoLabel[ev.tipo]||ev.tipo}</span>
+              <span style="font-size:10px;color:#94a3b8">${ev.data?new Date(ev.data+'T00:00').toLocaleDateString('pt-BR'):''} · ${ev.operador||''}</span>
+            </div>
+            ${ev.codSap||ev.ferramenta?`<div style="font-size:12px;font-weight:600;color:#1e293b">${ev.codSap?`[${ev.codSap}] `:''}${ev.ferramenta||''} ${ev.qtd>1?`× ${ev.qtd}`:''}</div>`:''}
+            ${ev.autorizador?`<div style="font-size:11px;color:#64748b;margin-top:3px">Autorizado: ${ev.autorizador}</div>`:''}
+            ${ev.obs?`<div style="font-size:11px;color:#475569;margin-top:4px;padding:6px 8px;background:#f8fafc;border-radius:4px">${ev.obs}</div>`:''}
+          </div>`;
+        }).join('') : '<div style="padding:20px;text-align:center;color:#94a3b8">Nenhum evento registrado para este kit.</div>'}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="document.getElementById('modalHistKit').remove()">Fechar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function salvarHistoricoKit(kitId){
+  const tipo=document.getElementById('histTipo')?.value||'';
+  if(!tipo)return alert('Selecione o tipo de movimentação.');
+  const ev={
+    id:'HK_'+Date.now(),ts:Date.now(),
+    tipo,
+    data:document.getElementById('histData')?.value||'',
+    autorizador:(document.getElementById('histAutorizador')?.value||'').trim(),
+    codSap:(document.getElementById('histCodSap')?.value||'').trim(),
+    ferramenta:(document.getElementById('histFerramenta')?.value||'').trim(),
+    qtd:parseInt(document.getElementById('histQtd')?.value)||1,
+    obs:(document.getElementById('histObs')?.value||'').trim(),
+    operador:STATE.usuario?.nome||''
+  };
+  await fetch(`${FB_HISTORICO_KIT}/${kitId}/${ev.id}.json`,
+    {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(ev)});
+  document.getElementById('modalHistKit')?.remove();
+  showToast('✅ Movimentação registrada!','success');
+  abrirHistoricoKit(kitId);
+}
+
+// ─── CAUTELA PDF ─────────────────────────────────────────────
+function gerarCautelaPDF(cau, kit){
+  const mod = _modelos.find(m=>m.id===kit.modeloId);
+  const itens = mod?.itens||[];
+  const dataFmt = d=>d?new Date(d+'T00:00').toLocaleDateString('pt-BR'):'—';
+
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head>
+  <meta charset="UTF-8">
+  <title>Cautela — Kit ${kit.numero}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',Arial,sans-serif;font-size:11px;color:#1a1a1a;background:#fff}
+    @page{size:A4;margin:10mm 12mm}
+    @media print{.no-print{display:none}}
+    .header{display:flex;align-items:center;justify-content:space-between;padding:0 0 8px;border-bottom:3px solid #F37021;margin-bottom:12px}
+    .logo{font-size:28px;font-weight:900;color:#F37021;letter-spacing:.05em;line-height:1}
+    .logo small{display:block;font-size:9px;font-weight:400;color:#666;letter-spacing:.1em;text-transform:uppercase}
+    .doc-title{text-align:right}
+    .doc-title h1{font-size:16px;font-weight:800;color:#0D1B2A}
+    .doc-title p{font-size:10px;color:#666;margin-top:2px}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;background:#f8f9fa;padding:10px;border-radius:6px;border:1px solid #e2e8f0}
+    .info-item label{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block}
+    .info-item span{font-size:11px;font-weight:600;color:#1a1a1a}
+    .section-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#F37021;margin:10px 0 6px;padding-bottom:3px;border-bottom:2px solid #F37021}
+    table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:10px}
+    th{background:#0D1B2A;color:#fff;padding:6px 8px;text-align:left;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
+    td{padding:5px 8px;border-bottom:1px solid #eee}
+    tr:nth-child(even){background:#f9f9f9}
+    .sig-area{margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .sig-box{border:1px solid #ccc;border-radius:4px;padding:8px;min-height:70px;position:relative}
+    .sig-box label{font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#888;display:block;margin-bottom:4px}
+    .sig-box img{max-height:55px;max-width:100%}
+    .footer{margin-top:10px;padding-top:6px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;font-size:8px;color:#999}
+    .kit-badge{background:#0D1B2A;color:#fff;padding:3px 10px;border-radius:4px;font-family:monospace;font-weight:700;font-size:14px;letter-spacing:.05em}
+    .tipo-badge{background:${cau.tipo==='entrega'?'#d1fae5':'#fee2e2'};color:${cau.tipo==='entrega'?'#065f46':'#991b1b'};padding:2px 8px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase}
+    .btn-print{position:fixed;top:16px;right:16px;background:#F37021;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(243,112,33,.4)}
+    .btn-print:hover{background:#d45e10}
+  </style></head><body>
+  <button class="btn-print no-print" onclick="window.print()">🖨 Imprimir / PDF</button>
+
+  <div class="header">
+    <div class="logo">mills<small>Equipamentos</small></div>
+    <div class="doc-title">
+      <h1>CAUTELA DE FERRAMENTAS</h1>
+      <p>Documento: ${cau.id} &nbsp;|&nbsp; <span class="tipo-badge">${cau.tipo==='entrega'?'Entrega':'Devolução'}</span></p>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <span class="kit-badge">${kit.numero}</span>
+    <span style="font-size:11px;color:#666">Modelo: <strong>${kit.modeloNome}</strong></span>
+    <span style="font-size:11px;color:#666">Data: <strong>${dataFmt(cau.data)}</strong></span>
+  </div>
+
+  <div class="info-grid">
+    <div class="info-item"><label>Funcionário</label><span>${cau.responsavel||'—'}</span></div>
+    <div class="info-item"><label>Matrícula</label><span>${cau.matricula||'—'}</span></div>
+    <div class="info-item"><label>Função</label><span>${cau.funcao||'—'}</span></div>
+    <div class="info-item"><label>Encarregado</label><span>${cau.encarregado||'—'}</span></div>
+    <div class="info-item"><label>Oficina</label><span>${kit.oficina||'—'}</span></div>
+    <div class="info-item"><label>Condição</label><span>${cau.condicao||'—'}</span></div>
+    ${cau.nf?`<div class="info-item"><label>Nota Fiscal</label><span>${cau.nf}</span></div>`:''}
+    ${cau.obs?`<div class="info-item" style="grid-column:1/-1"><label>Observações</label><span>${cau.obs}</span></div>`:''}
+  </div>
+
+  <div class="section-title">Lista de Ferramentas — ${itens.length} itens</div>
+  <table>
+    <thead><tr><th>#</th><th>Cód. SAP</th><th>Descrição</th><th>Qtd</th><th>Unid.</th><th>Conferido</th></tr></thead>
+    <tbody>
+    ${itens.map((it,i)=>`<tr>
+      <td style="color:#666;text-align:center">${i+1}</td>
+      <td style="font-family:monospace">${it.codigo||'—'}</td>
+      <td>${it.descricao}</td>
+      <td style="text-align:center;font-weight:600">${it.qtd}</td>
+      <td style="color:#666">${it.unid||'PÇ'}</td>
+      <td style="text-align:center">☐</td>
+    </tr>`).join('')}
+    </tbody>
+  </table>
+
+  <div class="sig-area">
+    <div class="sig-box">
+      <label>Assinatura do Funcionário</label>
+      ${cau.assinatura&&cau.assinatura.length>50?`<img src="${cau.assinatura}" alt="assinatura">`:'<div style="height:50px"></div>'}
+      <div style="border-top:1px solid #ccc;padding-top:4px;margin-top:4px;font-size:9px;color:#888">${cau.responsavel||''} — ${dataFmt(cau.data)}</div>
+    </div>
+    <div class="sig-box">
+      <label>Assinatura do Responsável / Encarregado</label>
+      <div style="height:50px"></div>
+      <div style="border-top:1px solid #ccc;padding-top:4px;margin-top:4px;font-size:9px;color:#888">${cau.encarregado||''} — ${dataFmt(cau.data)}</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Mills Equipamentos · Sistema de Gestão de Ferramentaria</span>
+    <span>Gerado em ${new Date().toLocaleString('pt-BR')}</span>
+  </div>
+  </body></html>`;
+
+  const w=window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
 }
 </script>
 </body>
