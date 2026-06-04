@@ -3825,33 +3825,122 @@ function renderKitHistorico(){
 
 // ─── FERRAMENTARIA (compartilhadas) ──────────────────────────
 function renderFerramentaria(){
-  // Alias para a página de ferramentas compartilhadas
-  const ferrs=Object.values(STATE.ferramentas||{}).filter(f=>f!=null&&f.tipo==='compartilhada');
+  const ferrs   = Object.values(STATE.ferramentas||{}).filter(f=>f!=null&&f.tipo==='compartilhada');
+  const movAbertos = movimentacoesList().filter(m=>!m.devolvido);
+  const empreMap = {}; // ferramentaId → movimento aberto
+  movAbertos.forEach(m=>{ empreMap[m.ferramentaId]=m; });
+  const disponiveis = ferrs.filter(f=>!empreMap[f.id]&&f.ativo!==false).length;
   const mc=document.getElementById('mainContent');
-  mc.innerHTML=`<div style="margin-bottom:12px;color:var(--text2);font-size:13px">${ferrs.length} ferramenta(s) compartilhada(s)</div>
+
+  mc.innerHTML=`
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-top:3px solid #0f766e">
+      <div style="font-size:24px;font-weight:900;color:#0f766e">${ferrs.length}</div>
+      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px">Total</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-top:3px solid #059669">
+      <div style="font-size:24px;font-weight:900;color:#059669">${disponiveis}</div>
+      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px">Disponíveis</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-top:3px solid #d97706">
+      <div style="font-size:24px;font-weight:900;color:#d97706">${movAbertos.length}</div>
+      <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px">Emprestadas</div>
+    </div>
+  </div>
+
+  <!-- Ações + Busca -->
   <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-    <input type="text" id="fcompBusca" placeholder="Buscar..." oninput="filtrarFComp()" style="padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;flex:1;min-width:200px;outline:none">
+    <input type="text" id="fcompBusca" placeholder="🔍 Buscar por código ou descrição..." oninput="filtrarFComp()" style="padding:8px 12px;border:1px solid var(--border);border-radius:7px;font-size:12px;flex:1;min-width:200px;outline:none">
+    <select id="fcompFiltroStatus" onchange="filtrarFComp()" style="padding:8px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;background:#fff">
+      <option value="">Status — Todos</option>
+      <option value="disponivel">Disponível</option>
+      <option value="emprestada">Emprestada</option>
+    </select>
     <button class="btn btn-primary" onclick="openModalRetirada()">📤 Nova Retirada</button>
     <button class="btn btn-outline" onclick="openModalDevolucao()">📥 Devolução</button>
     ${isAdmin()?`<button class="btn btn-outline" onclick="openModalFerramenta()">+ Cadastrar</button>`:''}
   </div>
-  <div id="fcompTabela" class="table-wrap"></div>`;
+
+  <!-- Tabela principal -->
+  <div id="fcompTabela" class="table-wrap" style="margin-bottom:24px"></div>
+
+  <!-- Emprestadas agora -->
+  ${movAbertos.length?`
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px;margin-bottom:20px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#d97706;margin-bottom:10px">📤 Atualmente Emprestadas (${movAbertos.length})</div>
+    <table class="data-table">
+      <thead><tr><th>Código</th><th>Ferramenta</th><th>Responsável</th><th>Operador</th><th>Oficina</th><th>Finalidade</th><th>Data/Hora</th><th>Ação</th></tr></thead>
+      <tbody>
+      ${movAbertos.sort((a,b)=>(b.ts||0)-(a.ts||0)).map((m,i)=>`<tr style="background:${i%2?'#fff':'#fffbeb'}">
+        <td style="font-family:monospace;font-weight:700">${m.ferramentaCodigo||'—'}</td>
+        <td style="font-size:11px">${m.ferramentaDesc||'—'}</td>
+        <td style="font-size:11px;font-weight:600">${m.responsavel||'—'}</td>
+        <td style="font-size:11px;color:#64748b">${m.operador||'—'}</td>
+        <td style="font-size:11px">${m.oficina||'—'}</td>
+        <td style="font-size:11px;color:#64748b">${m.finalidade||'—'}</td>
+        <td style="font-size:11px;color:#64748b">${m.dataHora||'—'}</td>
+        <td><button class="btn btn-sm btn-outline" onclick="iniciarDevMovId('${m.id}')" style="font-size:11px;padding:3px 10px">📥 Devolver</button></td>
+      </tr>`).join('')}
+      </tbody>
+    </table>
+  </div>`:''}
+
+  <!-- Histórico recente -->
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:10px">📋 Histórico Recente</div>
+    <table class="data-table">
+      <thead><tr><th>Código</th><th>Ferramenta</th><th>Tipo</th><th>Responsável</th><th>Data/Hora</th><th>Status</th></tr></thead>
+      <tbody>
+      ${movimentacoesList().filter(m=>m.ferramentaId).sort((a,b)=>(b.ts||0)-(a.ts||0)).slice(0,20).map((m,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'}">
+        <td style="font-family:monospace;font-weight:700">${m.ferramentaCodigo||'—'}</td>
+        <td style="font-size:11px">${m.ferramentaDesc||'—'}</td>
+        <td style="font-size:11px"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:${m.tipo==='retirada'?'#fff7ed':'#f0fdf4'};color:${m.tipo==='retirada'?'#d97706':'#059669'}">${m.tipo==='retirada'?'📤 Retirada':'📥 Devolução'}</span></td>
+        <td style="font-size:11px">${m.responsavel||'—'}</td>
+        <td style="font-size:11px;color:#64748b">${m.dataHora||'—'}</td>
+        <td style="font-size:11px"><span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:${m.devolvido?'#f0fdf4':'#fffbeb'};color:${m.devolvido?'#059669':'#d97706'}">${m.devolvido?'Devolvida':'Em aberto'}</span></td>
+      </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;padding:20px;color:#94a3b8">Nenhum histórico ainda.</td></tr>'}
+      </tbody>
+    </table>
+  </div>`;
+
   filtrarFComp();
 }
 
 function filtrarFComp(){
   const q=(document.getElementById('fcompBusca')?.value||'').toLowerCase();
-  const ferrs=Object.values(STATE.ferramentas||{}).filter(f=>f!=null&&f.tipo==='compartilhada'&&(!q||(f.codigo||'').toLowerCase().includes(q)||(f.descricao||'').toLowerCase().includes(q)));
+  const filtStatus=document.getElementById('fcompFiltroStatus')?.value||'';
+  const movAbertos=movimentacoesList().filter(m=>!m.devolvido);
+  const empreMap={}; movAbertos.forEach(m=>{empreMap[m.ferramentaId]=m;});
+  const ferrs=Object.values(STATE.ferramentas||{}).filter(f=>{
+    if(!f||f.tipo!=='compartilhada') return false;
+    if(q){const t=((f.codigo||'')+' '+(f.descricao||'')).toLowerCase();if(!q.split(/\s+/).every(p=>t.includes(p)))return false;}
+    const emprestada=!!empreMap[f.id];
+    if(filtStatus==='disponivel'&&emprestada) return false;
+    if(filtStatus==='emprestada'&&!emprestada) return false;
+    return true;
+  });
   const wrap=document.getElementById('fcompTabela'); if(!wrap)return;
-  wrap.innerHTML=`<table class="data-table"><thead><tr><th>Código</th><th>Descrição</th><th>Categoria</th><th>Condição</th><th>Status</th><th>Ações</th></tr></thead><tbody>
-  ${ferrs.length?ferrs.map((f,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'}">
-    <td style="font-family:monospace;font-weight:600">${f.codigo||'—'}</td>
-    <td>${f.descricao||'—'}</td>
-    <td>${f.categoria||'—'}</td>
-    <td>${f.condicao||'—'}</td>
-    <td><span style="font-size:10px;padding:2px 7px;border-radius:4px;background:${f.ativo!==false?'#d1fae5':'#fee2e2'};color:${f.ativo!==false?'#059669':'#dc2626'};font-weight:700">${f.ativo!==false?'Ativa':'Inativa'}</span></td>
-    <td><button class="btn-icon" onclick="openModalRetiradaFerr('${f.id}')" title="Retirada">📤</button></td>
-  </tr>`).join(''):'<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--gray)">Nenhuma ferramenta compartilhada.</td></tr>'}
+  wrap.innerHTML=`<table class="data-table"><thead><tr>
+    <th>Código</th><th>Descrição</th><th>Categoria</th><th>Status</th><th>Com quem</th><th>Ações</th>
+  </tr></thead><tbody>
+  ${ferrs.length?ferrs.map((f,i)=>{
+    const mov=empreMap[f.id];
+    const emprestada=!!mov;
+    return`<tr style="background:${emprestada?'#fffbeb':i%2?'#fff':'#f8fafc'}">
+      <td style="font-family:monospace;font-weight:600">${f.codigo||'—'}</td>
+      <td>${f.descricao||'—'}</td>
+      <td style="font-size:11px;color:#64748b">${f.categoria||'—'}</td>
+      <td><span style="font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;background:${emprestada?'#fef3c7':'#d1fae5'};color:${emprestada?'#d97706':'#059669'}">${emprestada?'🔒 Emprestada':'✅ Disponível'}</span></td>
+      <td style="font-size:11px">${mov?`<div style="font-weight:600">${mov.responsavel||'—'}</div><div style="font-size:10px;color:#64748b">${mov.dataHora||''}</div>`:'—'}</td>
+      <td>
+        ${emprestada
+          ?`<button class="btn-icon" onclick="iniciarDevMovId('${mov.id}')" title="Devolver" style="color:#059669">📥</button>`
+          :`<button class="btn-icon" onclick="openModalRetiradaFerr('${f.id}')" title="Retirar"${f.ativo===false?' disabled style="opacity:.4"':''}>📤</button>`
+        }
+      </td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--gray)">Nenhuma ferramenta encontrada.</td></tr>'}
   </tbody></table>`;
 }
 
