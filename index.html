@@ -2725,6 +2725,35 @@ let _catalogo = [], _modelos = [], _kits = [], _cautelas = [], _auditorias = [];
 async function loadCatalogo(){ try{ const r=await fetch(FB_CATALOGO+'.json'); const d=await r.json(); _catalogo=d&&typeof d==='object'?Object.values(d).filter(Boolean).sort((a,b)=>a.descricao?.localeCompare(b.descricao||'')):[];}catch(e){_catalogo=[];} }
 async function loadModelos(){  try{ const r=await fetch(FB_MODELOS+'.json');  const d=await r.json(); _modelos=d&&typeof d==='object'?Object.values(d).filter(Boolean):[]; }catch(e){_modelos=[];} }
 async function loadKits(){     try{ const r=await fetch(FB_KITS+'.json');      const d=await r.json(); _kits=d&&typeof d==='object'?Object.values(d).filter(Boolean):[]; }catch(e){_kits=[];} }
+
+// Carregar operações do PCM (Firebase compartilhado)
+async function loadOperacoes(){
+  if(window._operacoesLista&&window._operacoesLista.length)return;
+  try{
+    const r=await fetch('https://mills-frota-default-rtdb.firebaseio.com/ferramentaria/operacoes_lista.json');
+    const d=await r.json();
+    window._operacoesLista=d&&typeof d==='object'?Object.values(d).map(o=>o.nome).filter(Boolean).sort():[];
+  }catch(e){window._operacoesLista=[];}
+}
+
+// Carregar nomes de usuários para select gestor
+function loadUsuariosNomes(){
+  try{
+    const fb=window.STATE?.usuariosCache||[];
+    const stored=localStorage.getItem('ferramentaria_usuarios');
+    const list=fb.length?fb:(stored?JSON.parse(stored):[]);
+    window._usuariosNomes=[...new Set(list.map(u=>u.nome).filter(Boolean))].sort();
+  }catch(e){window._usuariosNomes=[];}
+  // Fallback: carregar do Firebase
+  if(!window._usuariosNomes?.length){
+    fetch('https://mills-frota-default-rtdb.firebaseio.com/usuarios.json')
+      .then(r=>r.json())
+      .then(d=>{
+        if(Array.isArray(d))window._usuariosNomes=d.map(u=>u.nome).filter(Boolean).sort();
+        else if(d&&typeof d==='object')window._usuariosNomes=Object.values(d).map(u=>u?.nome).filter(Boolean).sort();
+      }).catch(()=>{});
+  }
+}
 async function loadCautelas(){ try{ const r=await fetch(FB_CAUTELAS+'.json');  const d=await r.json(); _cautelas=d&&typeof d==='object'?Object.values(d).filter(Boolean):[]; }catch(e){_cautelas=[];} }
 async function loadAuditorias(){ try{ const r=await fetch(FB_AUDITORIAS+'.json'); const d=await r.json(); _auditorias=d&&typeof d==='object'?Object.values(d).filter(Boolean):[]; }catch(e){_auditorias=[];} }
 function geId2(p='ID'){ return p+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6); }
@@ -2928,7 +2957,8 @@ let _sigPadKit = null;
 
 async function renderKit(tipo){
   _kitTipo = tipo;
-  await Promise.all([loadModelos(),loadKits(),loadCautelas(),loadAuditorias(),loadCatalogo()]);
+  await Promise.all([loadModelos(),loadKits(),loadCautelas(),loadAuditorias(),loadCatalogo(),loadOperacoes()]);
+  loadUsuariosNomes();
   renderKitPage();
 }
 
@@ -2941,6 +2971,7 @@ function renderKitPage(){
     <button id="kTab-modelos" onclick="kitAba('modelos')" style="padding:10px 20px;border:none;border-bottom:3px solid ${_kitAba==='modelos'?'var(--primary)':'transparent'};background:none;font-weight:${_kitAba==='modelos'?700:500};color:${_kitAba==='modelos'?'var(--primary)':'var(--gray)'};cursor:pointer;font-size:13px">📦 Modelos</button>
     <button id="kTab-kits"    onclick="kitAba('kits')"    style="padding:10px 20px;border:none;border-bottom:3px solid ${_kitAba==='kits'?'var(--primary)':'transparent'};background:none;font-weight:${_kitAba==='kits'?700:500};color:${_kitAba==='kits'?'var(--primary)':'var(--gray)'};cursor:pointer;font-size:13px">🗂 Kits Físicos</button>
     <button id="kTab-historico" onclick="kitAba('historico')" style="padding:10px 20px;border:none;border-bottom:3px solid ${_kitAba==='historico'?'var(--primary)':'transparent'};background:none;font-weight:${_kitAba==='historico'?700:500};color:${_kitAba==='historico'?'var(--primary)':'var(--gray)'};cursor:pointer;font-size:13px">📋 Histórico</button>
+    <button id="kTab-relatorios" onclick="kitAba('relatorios')" style="padding:10px 20px;border:none;border-bottom:3px solid ${_kitAba==='relatorios'?'var(--primary)':'transparent'};background:none;font-weight:${_kitAba==='relatorios'?700:500};color:${_kitAba==='relatorios'?'var(--primary)':'var(--gray)'};cursor:pointer;font-size:13px">📊 Relatórios</button>
   </div>
   <div id="kitConteudo"></div>`;
   renderKitConteudo();
@@ -2951,6 +2982,7 @@ function kitAba(aba){ _kitAba=aba; renderKitPage(); }
 function renderKitConteudo(){
   if(_kitAba==='modelos') renderKitModelos();
   else if(_kitAba==='kits') renderKitsFisicos();
+  else if(_kitAba==='relatorios') renderKitRelatorios();
   else renderKitHistorico();
 }
 
@@ -3119,16 +3151,18 @@ function renderKitsFisicos(){
     <button class="btn btn-primary" onclick="abrirFormKit()">+ Novo Kit</button>
   </div>
   <div class="table-wrap"><table class="data-table">
-    <thead><tr><th>Número</th><th>Modelo</th><th>Responsável</th><th>Oficina</th><th>Status</th><th>Próx. Auditoria</th><th>Ações</th></tr></thead>
+    <thead><tr><th>Número</th><th>Modelo</th><th>Responsável</th><th>Gestor</th><th>Operação</th><th>Oficina</th><th>Status</th><th>Próx. Auditoria</th><th>Ações</th></tr></thead>
     <tbody>${kits.length?kits.map(k=>{
       const audDias=k.proximaAuditoria?Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000):null;
       const audCor=audDias===null?'#94a3b8':audDias<0?'#dc2626':audDias<=7?'#d97706':audDias<=30?'#ca8a04':'#059669';
       const audTxt=audDias===null?'—':audDias<0?`Vencida ${Math.abs(audDias)}d`:`${new Date(k.proximaAuditoria+'T00:00').toLocaleDateString('pt-BR')}`;
       return `<tr>
       <td style="font-family:monospace;font-weight:700;font-size:14px">${k.numero||'—'}</td>
-      <td>${k.modeloNome||'—'}</td>
-      <td>${k.responsavel||'—'}</td>
-      <td>${k.oficina||'—'}</td>
+      <td style="font-size:11px">${k.modeloNome||'—'}</td>
+      <td style="font-size:11px">${k.responsavel||'—'}</td>
+      <td style="font-size:11px;color:#64748b">${k.gestor||'—'}</td>
+      <td style="font-size:11px;color:#64748b;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${k.operacao||''}">${k.operacao||'—'}</td>
+      <td style="font-size:11px">${k.oficina||'—'}</td>
       <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:${statusCor[k.status]||'#94a3b8'}18;color:${statusCor[k.status]||'#94a3b8'}">${statusLabel[k.status]||k.status||'—'}</span></td>
       <td style="font-size:11px;font-weight:600;color:${audCor}">${audTxt}</td>
       <td style="white-space:nowrap">
@@ -3172,6 +3206,20 @@ function abrirFormKit(id,modeloIdPre){
           ${OFICINAS.map(o=>`<option ${kit?.oficina===o?'selected':''}>${o}</option>`).join('')}
         </select></div>
       </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div><label class="form-label">Gestor</label>
+          <select class="form-control" id="kitGestor">
+            <option value="">— Selecione —</option>
+            ${(window._usuariosNomes||[]).map(n=>`<option ${kit?.gestor===n?'selected':''}>${n}</option>`).join('')}
+          </select>
+        </div>
+        <div><label class="form-label">Operação / Contrato</label>
+          <input class="form-control" id="kitOperacao" list="kitOperacaoList" value="${kit?.operacao||''}" placeholder="Buscar operação...">
+          <datalist id="kitOperacaoList">
+            ${(window._operacoesLista||[]).map(o=>`<option value="${o}">`).join('')}
+          </datalist>
+        </div>
+      </div>
       <div style="margin-bottom:12px"><label class="form-label">Prazo de Auditoria</label>
         <select class="form-control" id="kitPrazoAuditoria">
           <option value="">Sem prazo definido</option>
@@ -3198,7 +3246,7 @@ async function salvarKit(){
   const mod=_modelos.find(m=>m.id===modeloId);
   const prazoMeses=parseInt(document.getElementById('kitPrazoAuditoria')?.value)||0;
   const proximaAuditoria=prazoMeses?new Date(Date.now()+prazoMeses*30*24*3600*1000).toISOString().split('T')[0]:'';
-  const obj={numero,modeloId,modeloNome:mod?.nome||'',tipo:_kitTipo,responsavel:document.getElementById('kitResp')?.value||'',oficina:document.getElementById('kitOficina')?.value||'',status:'disponivel',prazoAuditoriaMeses:prazoMeses,proximaAuditoria:proximaAuditoria};
+  const obj={numero,modeloId,modeloNome:mod?.nome||'',tipo:_kitTipo,responsavel:document.getElementById('kitResp')?.value||'',oficina:document.getElementById('kitOficina')?.value||'',gestor:document.getElementById('kitGestor')?.value||'',operacao:(document.getElementById('kitOperacao')?.value||'').trim(),status:'disponivel',prazoAuditoriaMeses:prazoMeses,proximaAuditoria:proximaAuditoria};
   const editId=document.getElementById('kitEditId')?.value||'';
   if(editId){obj.id=editId;const idx=_kits.findIndex(k=>k.id===editId);if(idx>=0)_kits[idx]={..._kits[idx],...obj};}
   else{obj.id=geId2('KIT');obj.ts=Date.now();_kits.push(obj);}
@@ -3550,6 +3598,124 @@ async function salvarHistoricoKit(kitId){
   document.getElementById('modalHistKit')?.remove();
   showToast('✅ Movimentação registrada!','success');
   abrirHistoricoKit(kitId);
+}
+
+// ─── RELATÓRIOS DE KITS ──────────────────────────────────────
+function renderKitRelatorios(){
+  const kits=_kits.filter(k=>k.tipo===_kitTipo);
+  const wrap=document.getElementById('kitConteudo'); if(!wrap)return;
+
+  // Agrupar por gestor
+  const porGestor={};
+  kits.forEach(k=>{const g=k.gestor||'Sem gestor';if(!porGestor[g])porGestor[g]={total:0,entregues:0,disponiveis:0,vencidas:0};porGestor[g].total++;if(k.status==='entregue')porGestor[g].entregues++;else porGestor[g].disponiveis++;const d=k.proximaAuditoria?Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000):null;if(d!==null&&d<0)porGestor[g].vencidas++;});
+
+  // Agrupar por operação
+  const porOp={};
+  kits.forEach(k=>{const o=k.operacao||'Sem operação';if(!porOp[o])porOp[o]={total:0,kits:[]};porOp[o].total++;porOp[o].kits.push(k);});
+
+  // Status geral
+  const total=kits.length;
+  const entregues=kits.filter(k=>k.status==='entregue').length;
+  const audVencidas=kits.filter(k=>k.proximaAuditoria&&Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000)<0).length;
+  const aud30=kits.filter(k=>k.proximaAuditoria&&Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000)<=30&&Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000)>=0).length;
+
+  const barW=(v,max)=>max?Math.round(v/max*100):0;
+  const maxGestor=Math.max(...Object.values(porGestor).map(g=>g.total),1);
+  const maxOp=Math.max(...Object.values(porOp).map(o=>o.total),1);
+
+  wrap.innerHTML=`
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px">
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-top:3px solid #F37021">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:6px">Total de Kits</div>
+      <div style="font-size:28px;font-weight:900;color:#F37021">${total}</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-top:3px solid #059669">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:6px">Entregues</div>
+      <div style="font-size:28px;font-weight:900;color:#059669">${entregues}</div>
+      <div style="font-size:10px;color:#94a3b8">${total?Math.round(entregues/total*100):0}% do total</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-top:3px solid #dc2626">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:6px">Aud. Vencidas</div>
+      <div style="font-size:28px;font-weight:900;color:#dc2626">${audVencidas}</div>
+    </div>
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;border-top:3px solid #d97706">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#94a3b8;margin-bottom:6px">Vencem em 30d</div>
+      <div style="font-size:28px;font-weight:900;color:#d97706">${aud30}</div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+    <!-- Por Gestor -->
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:14px">📊 Kits por Gestor</div>
+      ${Object.entries(porGestor).sort((a,b)=>b[1].total-a[1].total).map(([g,v])=>`
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:12px;font-weight:600;color:#1e293b">${g}</span>
+            <span style="font-size:11px;color:#64748b">${v.total} kit(s) · ${v.entregues} entregue(s)${v.vencidas?` · <span style="color:#dc2626;font-weight:700">${v.vencidas} vencida(s)</span>`:''}</span>
+          </div>
+          <div style="background:#f1f5f9;border-radius:4px;height:8px;overflow:hidden">
+            <div style="background:#F37021;width:${barW(v.total,maxGestor)}%;height:100%;border-radius:4px;transition:width .4s"></div>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Por Operação -->
+    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:14px">🏭 Kits por Operação</div>
+      ${Object.entries(porOp).sort((a,b)=>b[1].total-a[1].total).map(([o,v])=>`
+        <div style="margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:11px;font-weight:600;color:#1e293b;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o}">${o}</span>
+            <span style="font-size:11px;color:#64748b">${v.total}</span>
+          </div>
+          <div style="background:#f1f5f9;border-radius:4px;height:8px;overflow:hidden">
+            <div style="background:#0D1B2A;width:${barW(v.total,maxOp)}%;height:100%;border-radius:4px"></div>
+          </div>
+        </div>`).join('')}
+    </div>
+  </div>
+
+  <!-- Tabela completa -->
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:18px;margin-top:16px">
+    <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:12px">📋 Detalhamento por Kit</div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="background:#0f172a;color:#fff">
+          ${['Kit','Modelo','Mecânico','Matrícula','Gestor','Operação','Status','Próx. Auditoria'].map(h=>`<th style="padding:7px 10px;text-align:left;white-space:nowrap">${h}</th>`).join('')}
+        </tr></thead>
+        <tbody>${kits.map((k,i)=>{
+          const d=k.proximaAuditoria?Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000):null;
+          const cor=d===null?'#94a3b8':d<0?'#dc2626':d<=7?'#d97706':d<=30?'#ca8a04':'#059669';
+          const txt=d===null?'—':d<0?`Vencida ${Math.abs(d)}d`:new Date(k.proximaAuditoria+'T00:00').toLocaleDateString('pt-BR');
+          return`<tr style="background:${i%2?'#fff':'#f8fafc'};border-bottom:1px solid #f1f5f9">
+            <td style="padding:6px 10px;font-family:monospace;font-weight:700">${k.numero||'—'}</td>
+            <td style="padding:6px 10px">${k.modeloNome||'—'}</td>
+            <td style="padding:6px 10px">${k.responsavel||'—'}</td>
+            <td style="padding:6px 10px;font-family:monospace">${k.matricula||'—'}</td>
+            <td style="padding:6px 10px">${k.gestor||'—'}</td>
+            <td style="padding:6px 10px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${k.operacao||''}">${k.operacao||'—'}</td>
+            <td style="padding:6px 10px"><span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;background:${k.status==='entregue'?'#d1fae5':'#f8fafc'};color:${k.status==='entregue'?'#065f46':'#64748b'}">${k.status==='entregue'?'Entregue':'Disponível'}</span></td>
+            <td style="padding:6px 10px;font-weight:600;color:${cor}">${txt}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:12px;text-align:right">
+      <button class="btn btn-outline" style="font-size:11px" onclick="exportarRelatorioKits()">📥 Exportar CSV</button>
+    </div>
+  </div>`;
+}
+
+function exportarRelatorioKits(){
+  const kits=_kits.filter(k=>k.tipo===_kitTipo);
+  const header=['Kit','Modelo','Mecânico','Matrícula','Gestor','Operação','Oficina','Status','Próx. Auditoria'];
+  const rows=kits.map(k=>[k.numero,k.modeloNome,k.responsavel,k.matricula,k.gestor,k.operacao,k.oficina,k.status,k.proximaAuditoria?new Date(k.proximaAuditoria+'T00:00').toLocaleDateString('pt-BR'):'']);
+  const csv=[header,...rows].map(r=>r.map(c=>`"${(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`kits_${_kitTipo}_${new Date().toISOString().split('T')[0]}.csv`;a.click();
 }
 
 // ─── CAUTELA PDF ─────────────────────────────────────────────
