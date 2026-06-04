@@ -1,4 +1,4 @@
-const CACHE = 'ferramentaria-v1';
+const CACHE = 'ferramentaria-v2';
 const STATIC = [
   '/Ferramentaria/',
   '/Ferramentaria/index.html',
