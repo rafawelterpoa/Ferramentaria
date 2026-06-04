@@ -1039,13 +1039,13 @@ async function renderDashboard() {
 
   // ── KPIs Kits de Campo ───────────────────────────────────────
   const kitsCampo     = (_kits||[]).filter(k=>k.tipo==='campo');
-  const kitsCampoDisp = kitsCampo.filter(k=>k.status==='disponivel'||k.status==='estoque');
-  const kitsCampoEntr = kitsCampo.filter(k=>k.status==='entregue');
+  const kitsCampoDisp = kitsCampo.filter(k=>k.status==='disponivel'||k.status==='estoque').length;
+  const kitsCampoEntr = kitsCampo.filter(k=>k.status==='entregue').length;
 
   // ── KPIs Kits de Oficina ─────────────────────────────────────
   const kitsOficina     = (_kits||[]).filter(k=>k.tipo==='oficina');
-  const kitsOficinaDisp = kitsOficina.filter(k=>k.status==='disponivel'||k.status==='estoque');
-  const kitsOficinaEntr = kitsOficina.filter(k=>k.status==='entregue');
+  const kitsOficinaDisp = kitsOficina.filter(k=>k.status==='disponivel'||k.status==='estoque').length;
+  const kitsOficinaEntr = kitsOficina.filter(k=>k.status==='entregue').length;
 
   // ── KPIs Ferramentaria (compartilhadas) ──────────────────────
   const ferrComp   = ferrs.filter(f=>f.tipo==='compartilhada');
