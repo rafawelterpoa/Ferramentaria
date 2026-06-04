@@ -1690,10 +1690,16 @@ function selecionarFerrRet(id, inline) {
 }
 
 function buscarFerramentaRetirada() {
-  const q = (document.getElementById('rBusca')?.value||'').toLowerCase();
+  const q = (document.getElementById('rBusca')?.value||'').toLowerCase().trim();
   const res = document.getElementById('rBuscaResultados');
   if (q.length<2) { res.style.display='none'; return; }
-  const list = ferramentasList().filter(f=>f.tipo==='compartilhada'&&((f.codigo||'').toLowerCase().includes(q)||(f.descricao||'').toLowerCase().includes(q)));
+  // Busca por cada palavra do termo (suporta "5000152 esmerilhadeira" etc)
+  const palavras = q.split(/\s+/).filter(p=>p.length>1);
+  const list = ferramentasList().filter(f=>{
+    if(f.tipo!=='compartilhada') return false;
+    const texto = ((f.codigo||'')+' '+(f.descricao||'')).toLowerCase();
+    return palavras.every(p=>texto.includes(p));
+  });
   if (!list.length) { res.innerHTML='<div style="padding:10px;font-size:0.82rem;color:var(--text-muted)">Nenhuma encontrada</div>'; res.style.display='block'; return; }
   res.style.display='block';
   res.innerHTML = list.slice(0,8).map(f=>`<div style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:0.85rem" onclick="selecionarFerrModalRet('${f.id}')" onmouseover="this.style.background='#f0f4f8'" onmouseout="this.style.background=''"><strong>${f.codigo}</strong> — ${f.descricao}</div>`).join('');
@@ -3862,10 +3868,10 @@ function openModalRetirada(){
 }
 
 function openModalRetiradaFerr(ferrId){
-  const f=Object.values(STATE.ferramentas||{}).find(x=>x&&x.id===ferrId);
-  if(f){document.getElementById('rBusca').value=f.codigo+' - '+f.descricao; buscarFerramentaRetirada();}
   popularSelectsRetirada();
   openModal('modalRetirada');
+  // Selecionar diretamente após abrir o modal
+  setTimeout(()=>selecionarFerrModalRet(ferrId), 100);
 }
 
 // Helper sig pad para kits
