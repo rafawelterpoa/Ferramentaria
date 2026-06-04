@@ -1161,7 +1161,7 @@ function renderFerramentas() {
       <div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${isAdmin()?`<button class="btn btn-outline" onclick="openModalImport()">📊 Importar Excel</button>`:''}
-        <button class="btn btn-primary" onclick="openModalFerramenta()">+ Nova Ferramenta</button>
+        ${isAdmin()?`<button class="btn btn-primary" onclick="openModalFerramenta()">+ Nova Ferramenta</button>`:''}
       </div>
     </div>
     <div class="filters">
@@ -2909,7 +2909,7 @@ function renderCatalogo(){
       <div style="font-size:13px;color:var(--text2)">${_catalogo.length} ferramentas no catálogo</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${isAdmin()?`<button class="btn btn-outline" onclick="abrirImportCatalogo()">📥 Importar da Lista Excel</button>`:''}
-        <button class="btn btn-primary" onclick="abrirFormCatalogo()">+ Nova Ferramenta</button>
+        ${isAdmin()?`<button class="btn btn-primary" onclick="abrirFormCatalogo()">+ Nova Ferramenta</button>`:''}
       </div>
     </div>
     <div class="filters" style="margin-bottom:12px">
@@ -2931,8 +2931,8 @@ function filtrarCatalogo(){
     <td style="font-family:monospace;font-weight:600">${f.codigo||'—'}</td>
     <td>${f.descricao||'—'}</td>
     <td style="text-align:right">${f.custo?'R$ '+parseFloat(f.custo).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}</td>
-    <td><button class="btn-icon" onclick="editarCatalogo('${f.id}')" title="Editar">✏️</button>
-        <button class="btn-icon danger" onclick="deletarCatalogo('${f.id}')" title="Remover">🗑️</button></td>
+    <td>${isAdmin()?`<button class="btn-icon" onclick="editarCatalogo('${f.id}')" title="Editar">✏️</button>
+        <button class="btn-icon danger" onclick="deletarCatalogo('${f.id}')" title="Remover">🗑️</button>`:''}</td>
   </tr>`).join('')}
   </tbody></table>${lista.length>200?`<div style="padding:8px;color:var(--text2);font-size:12px">Exibindo 200 de ${lista.length}. Use a busca para filtrar.</div>`:''}`;
 }
@@ -3134,7 +3134,7 @@ function renderKitModelos(){
   wrap.innerHTML=`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
     <div style="font-size:13px;color:var(--text2)">${mods.length} modelo(s) cadastrado(s)</div>
-    <button class="btn btn-primary" onclick="abrirFormModelo()">+ Novo Modelo</button>
+    ${isAdmin()?`<button class="btn btn-primary" onclick="abrirFormModelo()">+ Novo Modelo</button>`:''}
   </div>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px" id="gridModelos">
   ${mods.length?mods.map(m=>`
@@ -3142,8 +3142,8 @@ function renderKitModelos(){
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
         <div style="font-size:13px;font-weight:700;color:var(--text)">${m.nome}</div>
         <div style="display:flex;gap:6px">
-          <button class="btn-icon" onclick="editarModelo('${m.id}')" title="Editar">✏️</button>
-          <button class="btn-icon danger" onclick="deletarModelo('${m.id}')" title="Remover">🗑️</button>
+          ${isAdmin()?`<button class="btn-icon" onclick="editarModelo('${m.id}')" title="Editar">✏️</button>
+          <button class="btn-icon danger" onclick="deletarModelo('${m.id}')" title="Remover">🗑️</button>`:''}
         </div>
       </div>
       <div style="font-size:11px;color:var(--gray);margin-bottom:8px">${(m.itens||[]).length} ferramentas definidas</div>
@@ -3289,7 +3289,7 @@ function renderKitsFisicos(){
   wrap.innerHTML=`
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">
     <div style="font-size:13px;color:var(--text2)">${kits.length} kit(s) cadastrado(s)</div>
-    <button class="btn btn-primary" onclick="abrirFormKit()">+ Novo Kit</button>
+    ${isAdmin()?`<button class="btn btn-primary" onclick="abrirFormKit()">+ Novo Kit</button>`:''}
   </div>
   <div class="table-wrap"><table class="data-table">
     <thead><tr><th>Número</th><th>Modelo</th><th>Responsável</th><th>Gestor</th><th>Operação</th><th>Oficina</th><th>Status</th><th>Próx. Auditoria</th><th>Ações</th></tr></thead>
@@ -3311,8 +3311,8 @@ function renderKitsFisicos(){
         <button class="btn-icon" onclick="abrirCautela('${k.id}','devolucao')" title="Cautela Devolução">📥</button>
         <button class="btn-icon" onclick="abrirAuditoria('${k.id}')" title="Auditoria">🔍</button>
         <button class="btn-icon" onclick="abrirHistoricoKit('${k.id}')" title="Histórico">📋</button>
-        <button class="btn-icon" onclick="editarKit('${k.id}')" title="Editar">✏️</button>
-        <button class="btn-icon danger" onclick="deletarKit('${k.id}')" title="Remover">🗑️</button>
+        ${isAdmin()?`<button class="btn-icon" onclick="editarKit('${k.id}')" title="Editar">✏️</button>
+        <button class="btn-icon danger" onclick="deletarKit('${k.id}')" title="Remover">🗑️</button>`:''}
       </td>
     </tr>`;
     }).join(''):'<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--gray)">Nenhum kit cadastrado.</td></tr>'}
