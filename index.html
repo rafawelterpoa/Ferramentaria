@@ -1035,33 +1035,60 @@ function isAdmin() { return ['master','admin'].includes(STATE.usuario?.perfil) }
 async function renderDashboard() {
   if(!_kits||!_kits.length) await loadKits();
   const ferrs = ferramentasList();
-  const movs = movimentacoesList();
+  const movs  = movimentacoesList();
+  const kitsAll = _kits||[];
 
-  // ── KPIs Kits de Campo ───────────────────────────────────────
-  const kitsCampo     = (_kits||[]).filter(k=>k.tipo==='campo');
-  const kitsCampoDisp = kitsCampo.filter(k=>k.status==='disponivel'||k.status==='estoque').length;
-  const kitsCampoEntr = kitsCampo.filter(k=>k.status==='entregue').length;
+  // Kits Campo
+  const kCampo      = kitsAll.filter(k=>k.tipo==='campo').length;
+  const kCampoEntr  = kitsAll.filter(k=>k.tipo==='campo'&&k.status==='entregue').length;
+  const kCampoDisp  = kitsAll.filter(k=>k.tipo==='campo'&&(k.status==='disponivel'||k.status==='estoque')).length;
+  const kCampoAud   = kitsAll.filter(k=>k.tipo==='campo'&&k.status==='auditoria').length;
 
-  // ── KPIs Kits de Oficina ─────────────────────────────────────
-  const kitsOficina     = (_kits||[]).filter(k=>k.tipo==='oficina');
-  const kitsOficinaDisp = kitsOficina.filter(k=>k.status==='disponivel'||k.status==='estoque').length;
-  const kitsOficinaEntr = kitsOficina.filter(k=>k.status==='entregue').length;
+  // Kits Oficina
+  const kOf         = kitsAll.filter(k=>k.tipo==='oficina').length;
+  const kOfEntr     = kitsAll.filter(k=>k.tipo==='oficina'&&k.status==='entregue').length;
+  const kOfDisp     = kitsAll.filter(k=>k.tipo==='oficina'&&(k.status==='disponivel'||k.status==='estoque')).length;
 
-  // ── KPIs Ferramentaria (compartilhadas) ──────────────────────
-  const ferrComp   = ferrs.filter(f=>f.tipo==='compartilhada');
-  const emEmprestimo = movs.filter(m=>!m.devolvido).length;
-  const dispFerr   = ferrComp.length - emEmprestimo;
+  // Ferramentaria
+  const ferrComp    = ferrs.filter(f=>f.tipo==='compartilhada').length;
+  const emEmprestimo= movs.filter(m=>!m.devolvido).length;
+  const ferrDisp    = Math.max(0, ferrComp - emEmprestimo);
 
-  // ── Por Gestor ───────────────────────────────────────────────
-  const porGestor = {};
-  (_kits||[]).forEach(k=>{
-    const g=k.gestor||'Sem gestor'; if(!porGestor[g])porGestor[g]={campo:0,oficina:0,entregue:0,disp:0};
-    if(k.tipo==='campo')porGestor[g].campo++; else porGestor[g].oficina++;
-    if(k.status==='entregue')porGestor[g].entregue++; else porGestor[g].disp++;
+  // Por Gestor (HTML pré-gerado)
+  const gestorMap = {};
+  kitsAll.forEach(k=>{
+    const g=k.gestor||'Sem gestor';
+    if(!gestorMap[g]) gestorMap[g]={campo:0,oficina:0,entregue:0,disp:0};
+    if(k.tipo==='campo') gestorMap[g].campo++; else gestorMap[g].oficina++;
+    if(k.status==='entregue') gestorMap[g].entregue++; else gestorMap[g].disp++;
   });
+  const gestorHtml = Object.entries(gestorMap)
+    .sort((a,b)=>(b[1].campo+b[1].oficina)-(a[1].campo+a[1].oficina))
+    .map(([g,v])=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9">'
+      +'<span style="font-size:12px;font-weight:600;color:#1e293b">'+g+'</span>'
+      +'<div style="display:flex;gap:6px;align-items:center">'
+      +(v.campo?'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#d97706">🚜 '+v.campo+'</span>':'')
+      +(v.oficina?'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:#f0f9ff;color:#0284c7">🧰 '+v.oficina+'</span>':'')
+      +'<span style="font-size:10px;color:#94a3b8">'+v.entregue+' entregue(s)</span>'
+      +(v.disp?'<span style="font-size:10px;color:#059669;font-weight:600">'+v.disp+' disp.</span>':'')
+      +'</div></div>').join('') || '<div style="color:#94a3b8;font-size:12px;padding:10px 0">Nenhum gestor cadastrado</div>';
 
-  // ── Calibrações e empréstimos ────────────────────────────────
-  const total = ferrs.length;
+  // Auditorias próximas (HTML pré-gerado)
+  const audList = kitsAll.filter(k=>k.proximaAuditoria)
+    .map(k=>({...k, dd:Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000)}))
+    .sort((a,b)=>a.dd-b.dd).slice(0,8);
+  const audHtml = audList.length ? audList.map(k=>{
+    const cor=k.dd<0?'#dc2626':k.dd<=7?'#d97706':k.dd<=30?'#ca8a04':'#059669';
+    const txt=k.dd<0?'Vencida '+Math.abs(k.dd)+'d':k.dd===0?'Hoje':k.dd+'d';
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9">'
+      +'<div><span style="font-family:monospace;font-weight:700;font-size:12px">'+k.numero+'</span>'
+      +'<span style="font-size:10px;color:#64748b;margin-left:6px">'+(k.responsavel||'').split(' ')[0]+'</span></div>'
+      +'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:'+cor+'18;color:'+cor+'">'+txt+'</span>'
+      +'</div>';
+  }).join('') : '<div style="color:#94a3b8;font-size:12px;padding:10px 0">Nenhuma auditoria agendada</div>';
+
+  // Calibrações e empréstimos
+  const total      = ferrs.length;
   const vencendo30 = ferrs.filter(f=>{ const s=calibStatus(f); return s==='vencendo'||s==='vencida'; }).length;
 
   const proxCalib = ferrs
@@ -1083,19 +1110,19 @@ async function renderDashboard() {
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#64748b;margin-bottom:8px;margin-top:4px">🚜 Kits de Campo</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:20px">
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #F37021">
-        <div style="font-size:28px;font-weight:900;color:#F37021;line-height:1">${kitsCampo.length}</div>
+        <div style="font-size:28px;font-weight:900;color:#F37021;line-height:1">${kCampo}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Total</div>
       </div>
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #059669">
-        <div style="font-size:28px;font-weight:900;color:#059669;line-height:1">${kitsCampoEntr}</div>
+        <div style="font-size:28px;font-weight:900;color:#059669;line-height:1">${kCampoEntr}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Entregues</div>
       </div>
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #64748b">
-        <div style="font-size:28px;font-weight:900;color:#64748b;line-height:1">${kitsCampoDisp}</div>
+        <div style="font-size:28px;font-weight:900;color:#64748b;line-height:1">${kCampoDisp}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Disponíveis</div>
       </div>
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #7c3aed">
-        <div style="font-size:28px;font-weight:900;color:#7c3aed;line-height:1">${kitsCampo.filter(k=>k.status==='auditoria').length}</div>
+        <div style="font-size:28px;font-weight:900;color:#7c3aed;line-height:1">${kCampoAud}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Em Auditoria</div>
       </div>
     </div>
@@ -1104,15 +1131,15 @@ async function renderDashboard() {
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#64748b;margin-bottom:8px">🧰 Kits de Oficina</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:20px">
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #0D1B2A">
-        <div style="font-size:28px;font-weight:900;color:#0D1B2A;line-height:1">${kitsOficina.length}</div>
+        <div style="font-size:28px;font-weight:900;color:#0D1B2A;line-height:1">${kOf}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Total</div>
       </div>
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #059669">
-        <div style="font-size:28px;font-weight:900;color:#059669;line-height:1">${kitsOficinaEntr}</div>
+        <div style="font-size:28px;font-weight:900;color:#059669;line-height:1">${kOfEntr}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Entregues</div>
       </div>
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #64748b">
-        <div style="font-size:28px;font-weight:900;color:#64748b;line-height:1">${kitsOficinaDisp}</div>
+        <div style="font-size:28px;font-weight:900;color:#64748b;line-height:1">${kOfDisp}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Disponíveis</div>
       </div>
     </div>
@@ -1121,11 +1148,11 @@ async function renderDashboard() {
     <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#64748b;margin-bottom:8px">🏭 Ferramentaria</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:24px">
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #0f766e">
-        <div style="font-size:28px;font-weight:900;color:#0f766e;line-height:1">${ferrComp.length}</div>
+        <div style="font-size:28px;font-weight:900;color:#0f766e;line-height:1">${ferrComp}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Total Ferramentas</div>
       </div>
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #059669">
-        <div style="font-size:28px;font-weight:900;color:#059669;line-height:1">${Math.max(0,dispFerr)}</div>
+        <div style="font-size:28px;font-weight:900;color:#059669;line-height:1">${ferrDisp}</div>
         <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:4px">Disponíveis</div>
       </div>
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px 16px;border-top:3px solid #d97706">
@@ -1142,36 +1169,13 @@ async function renderDashboard() {
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:12px">📊 Kits por Gestor</div>
-        ${Object.entries(porGestor).sort((a,b)=>(b[1].campo+b[1].oficina)-(a[1].campo+a[1].oficina)).map(([g,v])=>`
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9">
-            <span style="font-size:12px;font-weight:600;color:#1e293b">${g}</span>
-            <div style="display:flex;gap:6px;align-items:center">
-              ${v.campo?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#d97706">🚜 ${v.campo}</span>`:''}
-              ${v.oficina?`<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:#f0f9ff;color:#0284c7">🧰 ${v.oficina}</span>`:''}
-              <span style="font-size:10px;color:#94a3b8">${v.entregue} entregue(s)</span>
-              ${v.disp?`<span style="font-size:10px;color:#059669;font-weight:600">${v.disp} disp.</span>`:''}
-            </div>
-          </div>`).join('') || '<div style="color:#94a3b8;font-size:12px;padding:10px 0">Nenhum gestor cadastrado</div>'}
+        ${gestorHtml}
       </div>
 
       <!-- Auditorias próximas -->
       <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:16px">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:12px">🔔 Próximas Auditorias</div>
-        ${(()=>{
-          const al=(_kits||[]).filter(k=>k.proximaAuditoria).map(k=>({...k,d:Math.ceil((new Date(k.proximaAuditoria)-new Date())/86400000)})).sort((a,b)=>a.d-b.d).slice(0,8);
-          if(!al.length) return '<div style="color:#94a3b8;font-size:12px;padding:10px 0">Nenhuma auditoria agendada</div>';
-          return al.map(k=>{
-            const cor=k.d<0?'#dc2626':k.d<=7?'#d97706':k.d<=30?'#ca8a04':'#059669';
-            const txt=k.d<0?`Vencida ${Math.abs(k.d)}d`:k.d===0?'Hoje':`${k.d}d`;
-            return`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9">
-              <div>
-                <span style="font-family:monospace;font-weight:700;font-size:12px">${k.numero}</span>
-                <span style="font-size:10px;color:#64748b;margin-left:6px">${(k.responsavel||'').split(' ')[0]}</span>
-              </div>
-              <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:${cor}18;color:${cor}">${txt}</span>
-            </div>`;
-          }).join('');
-        })()}
+        ${audHtml}
       </div>
     </div>
 
