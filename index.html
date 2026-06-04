@@ -2461,31 +2461,58 @@ function adminMudarAba(aba) {
 }
 
 function adminRenderColabs() {
-  const busca = (document.getElementById('colabBusca')?.value||'').toLowerCase();
+  const busca = (document.getElementById('colabBusca')?.value||'').toLowerCase().trim();
   const filtOf = document.getElementById('colabFiltroOf')?.value||'';
   const filtTipo = document.getElementById('colabFiltroTipo')?.value||'';
-  let lista = _colabs;
-  if(busca) lista = lista.filter(c=>(c.nome||'').toLowerCase().includes(busca)||(c.matricula||'').toLowerCase().includes(busca));
-  if(filtOf) lista = lista.filter(c=>c.oficina===filtOf);
-  if(filtTipo) lista = lista.filter(c=>c.tipo===filtTipo);
   const tbody = document.getElementById('adminTbodyColabs');
   if(!tbody) return;
-  if(!lista.length){tbody.innerHTML='<tr><td colspan="8" style="padding:32px;text-align:center;color:#94a3b8">Nenhum colaborador encontrado.</td></tr>';return;}
-  const tipoCor={campo:'#2563eb',oficina:'#F37021',externo:'#7c3aed'};
-  tbody.innerHTML = lista.map((c,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'};border-bottom:1px solid #f1f5f9">
-    <td style="padding:9px 14px;font-family:monospace;font-weight:600">${c.matricula||'—'}</td>
-    <td style="padding:9px 14px;font-weight:600">${c.nome||'—'}</td>
-    <td style="padding:9px 14px;font-size:0.82rem;color:#64748b">${c.cargo||'—'}</td>
+
+  // Sem filtro: mostrar aviso ao invés de 400+ linhas
+  const temFiltro = busca.length>=2 || filtOf || filtTipo;
+  if(!temFiltro){
+    tbody.innerHTML=`<tr><td colspan="8" style="padding:32px;text-align:center;color:#94a3b8">
+      <div style="font-size:32px;margin-bottom:8px">🔍</div>
+      <div style="font-weight:600;font-size:14px;color:#64748b;margin-bottom:4px">${_colabs.length} colaboradores cadastrados</div>
+      <div style="font-size:12px">Digite pelo menos 2 caracteres para buscar por nome ou matrícula</div>
+    </td></tr>`;
+    return;
+  }
+
+  let lista = _colabs;
+  if(busca) lista = lista.filter(c=>(c.nome||'').toLowerCase().includes(busca)||(c.matricula||'').toLowerCase().includes(busca)||(c.cargo||'').toLowerCase().includes(busca));
+  if(filtOf) lista = lista.filter(c=>c.oficina===filtOf);
+  if(filtTipo) lista = lista.filter(c=>c.tipo===filtTipo);
+
+  if(!lista.length){
+    tbody.innerHTML='<tr><td colspan="8" style="padding:32px;text-align:center;color:#94a3b8">Nenhum colaborador encontrado para "<strong>'+busca+'</strong>"</td></tr>';
+    return;
+  }
+
+  // Limitar a 50 resultados para performance
+  const mostrar = lista.slice(0,50);
+  const tipoCor={campo:'#2563eb',oficina:'#F37021',externo:'#7c3aed',colaborador:'#0f766e'};
+
+  // Destacar o termo buscado
+  const hl=(txt)=>busca?txt.replace(new RegExp(`(${busca.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi'),'<mark style="background:#fef08a;border-radius:2px">$1</mark>'):txt;
+
+  tbody.innerHTML = `
+    ${lista.length>50?`<tr><td colspan="8" style="padding:6px 14px;background:#fffbeb;font-size:11px;color:#92400e;text-align:center">
+      Exibindo 50 de ${lista.length} resultados. Refine a busca para ver mais.
+    </td></tr>`:''}
+    ${mostrar.map((c,i)=>`<tr style="background:${i%2?'#fff':'#f8fafc'};border-bottom:1px solid #f1f5f9">
+    <td style="padding:9px 14px;font-family:monospace;font-weight:600">${hl(c.matricula||'—')}</td>
+    <td style="padding:9px 14px;font-weight:600">${hl(c.nome||'—')}</td>
+    <td style="padding:9px 14px;font-size:0.82rem;color:#64748b">${hl(c.cargo||'—')}</td>
     <td style="padding:9px 14px;font-size:0.82rem">${c.oficina||'—'}</td>
     <td style="padding:9px 14px"><span style="font-size:0.75rem;font-weight:700;padding:2px 8px;border-radius:5px;background:${tipoCor[c.tipo]||'#94a3b8'}22;color:${tipoCor[c.tipo]||'#94a3b8'}">${c.tipo||'—'}</span></td>
     <td style="padding:9px 14px;font-family:monospace;font-size:0.82rem">${c.kit||'—'}</td>
     <td style="padding:9px 14px;text-align:center">${c.ativo!==false?'<span style="color:#16a34a;font-weight:700">✓</span>':'<span style="color:#dc2626;font-weight:700">✗</span>'}</td>
     <td style="padding:9px 14px;text-align:center">
       <button onclick="adminEditarColab('${c.id}')" style="background:none;border:none;cursor:pointer;color:#F37021;font-size:14px">✏️</button>
-      <button onclick="adminToggleColab('${c.id}')" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:14px" title="${c.ativo!==false?'Inativar':'Ativar'}">${c.ativo!==false?'🔴':'🟢'}</button>
+      <button onclick="adminToggleColab('${c.id}')" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:14px">${c.ativo!==false?'🔴':'🟢'}</button>
       <button onclick="adminDeletarColab('${c.id}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:14px">🗑️</button>
     </td>
-  </tr>`).join('');
+  </tr>`).join('')}`;
 }
 
 // ── USUÁRIOS DO SISTEMA ──────────────────────────────────
