@@ -43,19 +43,20 @@ a{text-decoration:none;color:inherit}
 #loginScreen{display:flex;min-height:100vh;font-family:'Segoe UI',system-ui,sans-serif;background:#1A2E35}
 .login-strip{width:5px;background:#E8630A;flex-shrink:0}
 .login-left{
-  flex:1;display:flex;flex-direction:column;justify-content:center;
+  flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;
   padding:56px 64px;background:#1A2E35;position:relative;
 }
 .login-top-logo{position:absolute;top:32px;left:48px;height:32px;width:auto;max-width:180px;object-fit:contain;opacity:.9}
-.login-brand{display:flex;flex-direction:column;gap:4px;margin-bottom:40px;align-items:center;text-align:center}
-.login-brand-name{font-size:2.2rem;font-weight:900;color:#fff;line-height:1;text-align:center}
+.login-brand{display:flex;flex-direction:column;gap:0;margin-bottom:20px;align-items:center;text-align:center}
+.login-brand-name{font-size:3.8rem;font-weight:900;color:#fff;line-height:1;text-align:center}
 .login-brand-name span{color:#E8630A}
-.login-brand-sub{font-size:.68rem;font-weight:700;letter-spacing:.22em;color:#5A7280;text-transform:uppercase;margin-top:4px}
-.login-divider{width:36px;height:2px;background:#E8630A;border-radius:1px;margin:20px 0}
-.login-hero-text h2{font-size:2rem;font-weight:800;color:#fff;line-height:1.25;margin-bottom:10px}
+.login-brand-sub{display:none}
+.login-divider{display:none}
+.login-hero-text{text-align:center}
+.login-hero-text h2{font-size:1.5rem;font-weight:800;color:#fff;line-height:1.2;margin-bottom:8px;white-space:nowrap}
 .login-hero-text h2 span{color:#E8630A}
-.login-hero-text p{font-size:.92rem;color:#5A7280;line-height:1.6;max-width:340px}
-.login-features{display:flex;flex-direction:column;gap:12px;margin-top:36px}
+.login-hero-text p{font-size:.9rem;color:#5A7280;line-height:1.6;text-align:center}
+.login-features{display:flex;flex-direction:column;gap:10px;position:absolute;bottom:48px;left:48px}
 .login-feat{display:flex;align-items:center;gap:10px}
 .login-feat-dot{width:6px;height:6px;background:#E8630A;border-radius:50%;flex-shrink:0}
 .login-feat-icon{display:none}
@@ -335,7 +336,7 @@ tr:hover td{background:#F5EFE5}
     <div class="login-divider"></div>
 
     <div class="login-hero-text">
-      <h2>Controle total de<br><span>Ferramentas.</span></h2>
+      <h2>Controle total de <span>Ferramentas.</span></h2>
       <p>Gerenciamento de ferramentas de campo, dedicadas e compartilhadas.</p>
     </div>
 
