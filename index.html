@@ -44,10 +44,11 @@ a{text-decoration:none;color:inherit}
 .login-strip{width:5px;background:#E8630A;flex-shrink:0}
 .login-left{
   flex:1;display:flex;flex-direction:column;justify-content:center;
-  padding:56px 64px;background:#1A2E35;
+  padding:56px 64px;background:#1A2E35;position:relative;
 }
-.login-brand{display:flex;flex-direction:column;gap:4px;margin-bottom:40px}
-.login-brand-name{font-size:2.2rem;font-weight:900;color:#fff;line-height:1}
+.login-top-logo{position:absolute;top:32px;left:48px;height:32px;width:auto;max-width:180px;object-fit:contain;opacity:.9}
+.login-brand{display:flex;flex-direction:column;gap:4px;margin-bottom:40px;align-items:center;text-align:center}
+.login-brand-name{font-size:2.2rem;font-weight:900;color:#fff;line-height:1;text-align:center}
 .login-brand-name span{color:#E8630A}
 .login-brand-sub{font-size:.68rem;font-weight:700;letter-spacing:.22em;color:#5A7280;text-transform:uppercase;margin-top:4px}
 .login-divider{width:36px;height:2px;background:#E8630A;border-radius:1px;margin:20px 0}
@@ -326,10 +327,9 @@ tr:hover td{background:#F5EFE5}
 
   <!-- ESQUERDA: branding industrial -->
   <div class="login-left">
+    <img src="logo_nova_mills-removebg-preview.png" alt="MILLS" class="login-top-logo">
     <div class="login-brand">
-      <img src="logo_nova_mills-removebg-preview.png" alt="MILLS" style="height:36px;width:auto;max-width:200px;object-fit:contain;display:block;margin-bottom:10px;opacity:.9">
       <div class="login-brand-name"><span>Ferramentaria</span></div>
-      <div class="login-brand-sub">Gestão de Ferramentas</div>
     </div>
 
     <div class="login-divider"></div>
