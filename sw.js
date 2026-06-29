@@ -1,58 +1,48 @@
-const CACHE = 'ferramentaria-v4';
+const CACHE = 'ferramentaria-v5';
 const STATIC = [
-  '/Ferramentaria/',
-  '/Ferramentaria/index.html',
   '/Ferramentaria/manifest.json',
   '/Ferramentaria/bg-login.jpg',
   '/Ferramentaria/logo_nova_mills-removebg-preview.png'
 ];
 
-// Instala e cacheia os arquivos estáticos
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll(STATIC)).then(() => self.skipWaiting())
   );
 });
 
-// Remove caches antigos
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Estratégia: Firebase = network-first | estáticos = cache-first
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // Firebase e SheetJS — sempre tenta a rede
-  if (url.hostname.includes('firebaseio.com') || url.hostname.includes('sheetjs') || url.hostname.includes('cdn.')) {
-    e.respondWith(
-      fetch(e.request).catch(() =>
-        new Response('{}', { headers: { 'Content-Type': 'application/json' } })
-      )
-    );
+  // index.html — sempre da rede (nunca do cache)
+  if (e.request.mode === 'navigate' || url.pathname.endsWith('index.html') || url.pathname === '/Ferramentaria/') {
+    e.respondWith(fetch(e.request, { cache: 'no-store' }).catch(() => caches.match(e.request)));
     return;
   }
 
-  // Arquivos locais — cache-first, fallback para index.html
+  // Firebase / CDN — sempre da rede
+  if (url.hostname.includes('firebaseio.com') || url.hostname.includes('cdn.')) {
+    e.respondWith(fetch(e.request).catch(() => new Response('{}', { headers: { 'Content-Type': 'application/json' } })));
+    return;
+  }
+
+  // Demais estáticos — cache-first
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        if (res && res.status === 200) {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return res;
-      }).catch(() => caches.match('/Ferramentaria/index.html'));
-    })
+    caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
+      if (res && res.status === 200) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+      return res;
+    }))
   );
 });
 
-// Escuta mensagem para forçar atualização
 self.addEventListener('message', e => {
   if (e.data === 'skipWaiting') self.skipWaiting();
 });
