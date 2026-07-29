@@ -1,6 +1,6 @@
 {
-  "name": "MILLS MillsTool",
-  "short_name": "MillsTool",
+  "name": "MILLS MillsTools",
+  "short_name": "MillsTools",
   "description": "Gestão de Ferramentas de campo, dedicadas e compartilhadas",
   "start_url": "/Ferramentaria/",
   "scope": "/Ferramentaria/",
