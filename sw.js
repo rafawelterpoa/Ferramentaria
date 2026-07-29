@@ -1,4 +1,4 @@
-const CACHE = 'ferramentaria-v5';
+const CACHE = 'ferramentaria-v6';
 const STATIC = [
   '/Ferramentaria/manifest.json',
   '/Ferramentaria/bg-login.jpg',
