@@ -510,7 +510,8 @@ tr:hover td{background:#F7F8FA}
     </svg>
   </div>
   <div style="position:absolute;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.85);font-size:16px;font-weight:700;letter-spacing:.18em">MILLSTOOLS</div>
-  <div style="display:flex;align-items:center;gap:10px">
+  <div style="display:flex;align-items:center;gap:14px">
+    <span id="hdr-sync" style="display:flex;align-items:center;gap:5px;font-size:10px;color:rgba(255,255,255,.4)">● Sincronizado</span>
     <div style="text-align:right">
       <div style="color:rgba(255,255,255,.85);font-size:12px;font-weight:600" id="hdr-user-name">—</div>
       <div style="color:#E8630A;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.04em" id="hdr-user-role">—</div>
@@ -868,9 +869,23 @@ let STATE = {
 // ===================== LOCAL STORAGE =====================
 const LS = {
   get: k => { try { return JSON.parse(localStorage.getItem('ferr_'+k)) } catch{return null} },
-  set: (k,v) => localStorage.setItem('ferr_'+k, JSON.stringify(v)),
+  // Cache local é só um fallback offline — se a cota do navegador estourar, não deve
+  // derrubar o fluxo (o dado já foi gravado no Firebase, que é a fonte da verdade).
+  set: (k,v) => { try { localStorage.setItem('ferr_'+k, JSON.stringify(v)); } catch(e) { console.warn('LS.set falhou ('+k+'):', e.message); } },
   del: k => localStorage.removeItem('ferr_'+k)
 };
+
+// Cache de movimentações sem as imagens de assinatura (base64), que são o que
+// mais rápido enche a cota do localStorage ao longo dos meses de uso.
+function cacheMovimentacoes(movs) {
+  const leve = {};
+  Object.entries(movs||{}).forEach(([id,m])=>{
+    if(!m) return;
+    const {assinatura, assinaturaDevolucao, ...resto} = m;
+    leve[id] = resto;
+  });
+  LS.set('movimentacoes', leve);
+}
 
 // ===================== FIREBASE REST =====================
 async function fbGet(path) {
@@ -884,23 +899,42 @@ async function fbGet(path) {
   }
 }
 async function fbSet(path, data) {
-  const r = await fetch(`${FB_BASE}/${path}.json`, {method:'PUT', body:JSON.stringify(data)});
-  if (!r.ok) throw new Error('HTTP '+r.status);
-  return await r.json();
+  setSyncStatus('saving');
+  try {
+    const r = await fetch(`${FB_BASE}/${path}.json`, {method:'PUT', body:JSON.stringify(data)});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const res = await r.json();
+    setSyncStatus('ok');
+    return res;
+  } catch(e) { setSyncStatus('error'); throw e; }
 }
 async function fbPatch(path, data) {
-  const r = await fetch(`${FB_BASE}/${path}.json`, {method:'PATCH', body:JSON.stringify(data)});
-  if (!r.ok) throw new Error('HTTP '+r.status);
-  return await r.json();
+  setSyncStatus('saving');
+  try {
+    const r = await fetch(`${FB_BASE}/${path}.json`, {method:'PATCH', body:JSON.stringify(data)});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const res = await r.json();
+    setSyncStatus('ok');
+    return res;
+  } catch(e) { setSyncStatus('error'); throw e; }
 }
 async function fbDelete(path) {
-  const r = await fetch(`${FB_BASE}/${path}.json`, {method:'DELETE'});
-  if (!r.ok) throw new Error('HTTP '+r.status);
+  setSyncStatus('saving');
+  try {
+    const r = await fetch(`${FB_BASE}/${path}.json`, {method:'DELETE'});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    setSyncStatus('ok');
+  } catch(e) { setSyncStatus('error'); throw e; }
 }
 async function fbPush(path, data) {
-  const r = await fetch(`${FB_BASE}/${path}.json`, {method:'POST', body:JSON.stringify(data)});
-  if (!r.ok) throw new Error('HTTP '+r.status);
-  return await r.json();
+  setSyncStatus('saving');
+  try {
+    const r = await fetch(`${FB_BASE}/${path}.json`, {method:'POST', body:JSON.stringify(data)});
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const res = await r.json();
+    setSyncStatus('ok');
+    return res;
+  } catch(e) { setSyncStatus('error'); throw e; }
 }
 async function fbGetUsuarios() {
   try {
@@ -1069,9 +1103,26 @@ async function startApp() {
   }
   await syncAll();
   navigate('dashboard', document.querySelector('.snav-item[data-page="dashboard"]'));
+  resetInatividadeTimer();
 }
 
+// ===================== LOGOUT AUTOMÁTICO POR INATIVIDADE =====================
+const INATIVIDADE_MS = 10*60*1000;
+let _inatividadeTimer = null;
+function resetInatividadeTimer() {
+  if (!STATE.usuario) return;
+  clearTimeout(_inatividadeTimer);
+  _inatividadeTimer = setTimeout(() => {
+    showToast('Sessão encerrada por inatividade. Faça login novamente.', 'error');
+    doLogout();
+  }, INATIVIDADE_MS);
+}
+['mousemove','keydown','mousedown','scroll','touchstart'].forEach(evt => {
+  document.addEventListener(evt, resetInatividadeTimer, {passive:true});
+});
+
 function doLogout() {
+  clearTimeout(_inatividadeTimer);
   LS.del('sessao');
   STATE.usuario=null;
   document.getElementById('app-header').style.display='none';
@@ -1082,20 +1133,31 @@ function doLogout() {
 }
 
 // ===================== SYNC =====================
+function setSyncStatus(s) {
+  const el = document.getElementById('hdr-sync'); if (!el) return;
+  const t = { ok:'● Sincronizado', loading:'↻ Sincronizando...', saving:'↻ Salvando...', error:'✕ Falha na sincronização' };
+  const c = { ok:'#3DD68C', loading:'rgba(255,255,255,.5)', saving:'#F2C744', error:'#E8630A' };
+  el.textContent = t[s]||t.ok;
+  el.style.color = c[s]||c.ok;
+}
+
 async function syncAll() {
+  setSyncStatus('loading');
   try {
     const [ferrs, movs] = await Promise.all([fbGet('ferramentas'), fbGet('movimentacoes')]);
     if (ferrs) { STATE.ferramentas = ferrs; LS.set('ferramentas', ferrs); }
     else STATE.ferramentas = LS.get('ferramentas')||{};
-    if (movs) { STATE.movimentacoes = movs; LS.set('movimentacoes', movs); }
+    if (movs) { STATE.movimentacoes = movs; cacheMovimentacoes(movs); }
     else STATE.movimentacoes = LS.get('movimentacoes')||{};
 
     // Atualizar lista de usuários
     const usrsCache = LS.get('usuarios_lista');
     if (usrsCache) STATE.usuarios = usrsCache;
+    setSyncStatus((ferrs && movs) ? 'ok' : 'error');
   } catch(e) {
     STATE.ferramentas = LS.get('ferramentas')||{};
     STATE.movimentacoes = LS.get('movimentacoes')||{};
+    setSyncStatus('error');
   }
 
   // Reatualizar página atual
@@ -2020,7 +2082,7 @@ async function confirmarRetirada() {
   try{
     await fbSet(`movimentacoes/${id}`,mov);
     STATE.movimentacoes[id]=mov;
-    LS.set('movimentacoes',STATE.movimentacoes);
+    cacheMovimentacoes(STATE.movimentacoes);
     STATE.retFerramentaId=null;
     clearSig('sigCanvas');
     document.getElementById('rBusca').value='';
@@ -2059,7 +2121,7 @@ async function confirmarRetiradaInline() {
   try {
     await fbSet(`movimentacoes/${id}`, mov);
     STATE.movimentacoes[id]=mov;
-    LS.set('movimentacoes',STATE.movimentacoes);
+    cacheMovimentacoes(STATE.movimentacoes);
     showToast('Retirada registrada!','success');
     retFerrIdInline=null;
     renderMovimentacoes();
@@ -2117,7 +2179,7 @@ async function confirmarDevInline() {
     await fbPatch(`movimentacoes/${devMovIdInline}`, {devolvido:true, dataHoraDevolucao:dtFmt, assinaturaDevolucao:sig});
     STATE.movimentacoes[devMovIdInline].devolvido=true;
     STATE.movimentacoes[devMovIdInline].dataHoraDevolucao=dtFmt;
-    LS.set('movimentacoes',STATE.movimentacoes);
+    cacheMovimentacoes(STATE.movimentacoes);
     showToast('Devolução registrada!','success');
     devMovIdInline=null;
     renderMovimentacoes();
@@ -2158,7 +2220,7 @@ async function confirmarDevolucao() {
     await fbPatch(`movimentacoes/${STATE.devMovId}`, {devolvido:true, dataHoraDevolucao:dtFmt, assinaturaDevolucao:sig});
     STATE.movimentacoes[STATE.devMovId].devolvido=true;
     STATE.movimentacoes[STATE.devMovId].dataHoraDevolucao=dtFmt;
-    LS.set('movimentacoes',STATE.movimentacoes);
+    cacheMovimentacoes(STATE.movimentacoes);
     closeModal('modalDevolucao');
     showToast('Devolução registrada!','success');
     renderMovimentacoes();
